@@ -23,11 +23,10 @@ namespace VcogBookmark.ClientTools.Services
             _baseUri = new Uri(baseAddress);
         }
         
-        public async Task<BookmarkFolder> GetHierarchy(bool withTime = true)
+        public async Task<BookmarkFolder> GetHierarchy()
         {
-            var requestPartialAddress = withTime ? "bookmarks/hierarchy-with-time" : "bookmarks/hierarchy";
-            
-            var client = new HttpClient {BaseAddress = _baseUri};
+            const string requestPartialAddress = "bookmarks/hierarchy";
+            using var client = new HttpClient {BaseAddress = _baseUri};
             var responseMessage = await client.GetAsync(requestPartialAddress);
             responseMessage.EnsureSuccessStatusCode();
             var response = await responseMessage.Content.ReadAsStringAsync();
@@ -39,8 +38,7 @@ namespace VcogBookmark.ClientTools.Services
             var client = new HttpClient {BaseAddress = _baseUri};
             var fileExtension = fileType.GetExtension();
             var responseMessage = await client.GetAsync($"{filePath}.{fileExtension}");
-            var headers = responseMessage.Headers;
-            var headersArray = responseMessage.Headers.ToArray();
+            var headers = responseMessage.Headers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             responseMessage.EnsureSuccessStatusCode();
             var dataStream = await responseMessage.Content.ReadAsStreamAsync();
             return new FileProfile(dataStream, filePath, fileType, DateTime.Today);
@@ -87,6 +85,21 @@ namespace VcogBookmark.ClientTools.Services
                 if (lastIndex == -1) lastIndex = 0;
                 return s.Substring(lastIndex, s.Length - lastIndex);
             }
+        }
+
+        public async Task<bool> DeleteBookmarkFromTheServer(string bookmarkPath)
+        {
+            const string requestPartialAddress = "bookmarks/delete";
+            using var client = new HttpClient {BaseAddress = _baseUri};
+            
+            var stringContent = new StringContent(bookmarkPath);
+            var multipartFormDataContent = new MultipartFormDataContent
+            {
+                {stringContent, "bookmarkPath"},
+            };
+            
+            var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
+            return responseMessage.IsSuccessStatusCode;
         }
     }
 }

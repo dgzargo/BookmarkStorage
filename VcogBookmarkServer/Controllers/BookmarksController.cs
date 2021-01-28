@@ -63,18 +63,27 @@ namespace VcogBookmarkServer.Controllers
             return result ? (IActionResult) Ok() : BadRequest();
         }
 
-        [HttpGet("hierarchy")]
-        public ActionResult<string> Hierarchy()
+        [HttpPost("delete")]
+        public IActionResult DeleteBookmark([FromForm]string bookmarkPath)
         {
-            var hierarchy = _storageService.GetHierarchy();
+            bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            _storageService.DeleteBookmark(bookmarkPath);
+            return Ok();
+        }
+
+        [HttpGet("hierarchy")]
+        public ActionResult<string> Hierarchy([FromQuery]string? root)
+        {
+            var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
             return _hierarchyService.ToJson(hierarchy);
         }
 
-        [HttpGet("hierarchy-with-time")]
-        public ActionResult<string> HierarchyWithTime()
+        [Obsolete("the same as above")]
+        [HttpGet("hierarchy-with-time")]// HierarchyWithTime
+        public ActionResult<string> HierarchyWithTime([FromQuery]string? root)
         {
-            var hierarchy = _storageService.GetHierarchy();
-            return _hierarchyService.ToJson(hierarchy, true);
+            var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
+            return _hierarchyService.ToJson(hierarchy);
         }
         
         private string GetPureFileExtension(string fileName)

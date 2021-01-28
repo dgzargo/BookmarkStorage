@@ -26,7 +26,7 @@ namespace VcogBookmark.Shared.Models
             }
         }
         
-        private IEnumerable<(List<string>, DateTime? LastTime)> GetUnwrappedBookmarksWithoutFolderName()
+        private IEnumerable<(List<string>, DateTime LastTime)> GetUnwrappedBookmarksWithoutFolderName()
         {
             foreach (var child in Children)
             {
@@ -75,13 +75,13 @@ namespace VcogBookmark.Shared.Models
 
         public static IEqualityComparer<Bookmark> BookmarkNameLastTimeComparer { get; } = new BookmarkNameLastTimeEqualityComparer();
 
-        public Bookmark(string bookmarkName, DateTime? lastTime)
+        public Bookmark(string bookmarkName, DateTime lastTime)
         {
             BookmarkName = bookmarkName;
             LastTime = lastTime;
         }
 
         public string BookmarkName { get; }
-        public DateTime? LastTime { get; }
+        public DateTime LastTime { get; }
     }
 }

@@ -54,11 +54,12 @@ namespace VcogBookmark.Shared.Services
                 _ => throw new ArgumentOutOfRangeException(nameof(writeMode), writeMode, null)
             };
             Directory.CreateDirectory(Path.GetDirectoryName(pathToSave)!);
-            Directory.CreateDirectory(Path.GetDirectoryName(pathToSave)!);
-            using var outputStream = new FileStream(pathToSave, fileMode);
-            await fileInputStream.CopyToAsync(outputStream);
-            File.SetCreationTimeUtc(fileProfile.LocalPath, fileProfile.LastTimeUtc);
-            File.SetLastWriteTimeUtc(fileProfile.LocalPath, fileProfile.LastTimeUtc);
+            using (var outputStream = new FileStream(pathToSave, fileMode))
+            {
+                await fileInputStream.CopyToAsync(outputStream);
+            }
+            File.SetCreationTimeUtc(pathToSave, fileProfile.LastTimeUtc);
+            File.SetLastWriteTimeUtc(pathToSave, fileProfile.LastTimeUtc);
             return true;
         }
         

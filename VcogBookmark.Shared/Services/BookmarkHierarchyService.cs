@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using VcogBookmark.Shared.Models;
@@ -8,19 +9,16 @@ namespace VcogBookmark.Shared.Services
 {
     public class BookmarkHierarchyService
     {
-        public string ToJson(IBookmarkHierarchyElement hierarchy, bool withCreationTime = false)
+        public string ToJson(IBookmarkHierarchyElement hierarchy)
         {
             if (hierarchy is Bookmark bookmarkHierarchyBookmark)
             {
-                if (withCreationTime)
-                {
-                    return $"\"{bookmarkHierarchyBookmark.BookmarkName}@{bookmarkHierarchyBookmark.LastTime}\"";
-                }
-                return $"\"{bookmarkHierarchyBookmark.BookmarkName}\"";
+                return $"\"{bookmarkHierarchyBookmark.BookmarkName}@{bookmarkHierarchyBookmark.LastTime:o}\"";
+                //return $"\"{bookmarkHierarchyBookmark.BookmarkName}\"";
             }
             if (hierarchy is BookmarkFolder bookmarkHierarchyFolder)
             {
-                var listOfSerializedChildren = string.Join(",", bookmarkHierarchyFolder.Children.Select(h=>ToJson(h, withCreationTime)));
+                var listOfSerializedChildren = string.Join(",", bookmarkHierarchyFolder.Children.Select(ToJson));
                 return bookmarkHierarchyFolder.FolderName == null
                     ? $"[{listOfSerializedChildren}]"
                     : $"{{\"{bookmarkHierarchyFolder.FolderName}\":[{listOfSerializedChildren}]}}";
@@ -43,9 +41,8 @@ namespace VcogBookmark.Shared.Services
                 if (jToken.Type == JTokenType.String)
                 {
                     var bookmarkData = jToken.ToString().Split('@');
-                    var bookmark = bookmarkData.Length == 1
-                        ? new Bookmark(bookmarkData[0], null)
-                        : new Bookmark(bookmarkData[0], DateTime.Parse(bookmarkData[1]).ToUniversalTime());
+                    if (bookmarkData.Length != 2) throw new FormatException("wrong bookmark format!");
+                    var bookmark = new Bookmark(bookmarkData[0], DateTime.Parse(bookmarkData[1]).ToUniversalTime());
                     children.Add(bookmark);
                 }
                 if (jToken.Type == JTokenType.Object)
