@@ -77,14 +77,6 @@ namespace VcogBookmarkServer.Controllers
             var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
             return _hierarchyService.ToJson(hierarchy);
         }
-
-        [Obsolete("the same as above")]
-        [HttpGet("hierarchy-with-time")]// HierarchyWithTime
-        public ActionResult<string> HierarchyWithTime([FromQuery]string? root)
-        {
-            var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
-            return _hierarchyService.ToJson(hierarchy);
-        }
         
         private string GetPureFileExtension(string fileName)
         {

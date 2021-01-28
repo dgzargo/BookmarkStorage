@@ -42,7 +42,14 @@ namespace VcogBookmarkServer
             
             var provider = new FileExtensionContentTypeProvider();
             provider.Mappings[".vbm"] = "application/text";
-            app.UseStaticFiles(new StaticFileOptions{ContentTypeProvider = provider});
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                ContentTypeProvider = provider,
+                OnPrepareResponse = context =>
+                {
+                    context.Context.Response.Headers.Add("File-Last-Modified", context.File.LastModified.ToString("o"));
+                }
+            });
             //app.UseDirectoryBrowser();//app.UseFileServer(enableDirectoryBrowsing: true);
             
             app.UseRouting();

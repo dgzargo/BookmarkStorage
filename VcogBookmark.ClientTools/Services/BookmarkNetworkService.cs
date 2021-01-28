@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.NetworkInformation;
 using System.Threading.Tasks;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
@@ -35,13 +36,15 @@ namespace VcogBookmark.ClientTools.Services
 
         public async Task<FileProfile> GetFile(string filePath, BookmarkFileType fileType)
         {
-            var client = new HttpClient {BaseAddress = _baseUri};
+            using var client = new HttpClient {BaseAddress = _baseUri};
             var fileExtension = fileType.GetExtension();
             var responseMessage = await client.GetAsync($"{filePath}.{fileExtension}");
-            var headers = responseMessage.Headers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             responseMessage.EnsureSuccessStatusCode();
             var dataStream = await responseMessage.Content.ReadAsStreamAsync();
-            return new FileProfile(dataStream, filePath, fileType, DateTime.Today);
+            var dateHeaderReceived = responseMessage.Headers.TryGetValues("File-Last-Modified", out var values);
+            if (!dateHeaderReceived) throw new NetworkInformationException();
+            var date = DateTime.Parse(values!.First()).ToUniversalTime();
+            return new FileProfile(dataStream, filePath, fileType, date);
         }
 
         public IEnumerable<Task<FileProfile>> GetAllBookmarkFiles(string filePath)
@@ -87,17 +90,18 @@ namespace VcogBookmark.ClientTools.Services
             }
         }
 
-        public async Task<bool> DeleteBookmarkFromTheServer(string bookmarkPath)
+        public async Task<bool> DeleteBookmarkFromTheServer(string? bookmarkPath = null)
         {
             const string requestPartialAddress = "bookmarks/delete";
             using var client = new HttpClient {BaseAddress = _baseUri};
             
-            var stringContent = new StringContent(bookmarkPath);
-            var multipartFormDataContent = new MultipartFormDataContent
+            var multipartFormDataContent = new MultipartFormDataContent();
+            if (bookmarkPath != null)
             {
-                {stringContent, "bookmarkPath"},
-            };
-            
+                var stringContent = new StringContent(bookmarkPath);
+                multipartFormDataContent.Add(stringContent, "bookmarkPath");
+            }
+
             var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
         }
