@@ -17,15 +17,21 @@ namespace Client
             var networkService = new BookmarkNetworkService("http://193.84.22.46:8282/VcogBookmarkServer/", bookmarkHierarchyService);// "https://localhost:5001/"
             var root = Directory.GetCurrentDirectory() ?? throw new Exception();
             var storageService = new StorageService(root);
-            // await storageService.SaveBookmark(networkService.GetAllBookmarkFiles("ex"), FileWriteMode.NotStrict); // there is a bug: need to change update time of file
-            /*await networkService.LoadBookmarkToTheServer(
-                File.OpenRead($"{root}/ex.{BookmarkFileType.BookmarkBody.GetExtension()}"),
-                File.OpenRead($"{root}/ex.{BookmarkFileType.BookmarkBody.GetExtension()}"),
+            var versionService = new BookmarkVersionService();
+            
+            // await storageService.SaveBookmark(networkService.GetAllBookmarkFiles("ex"), FileWriteMode.NotStrict);
+            // var result =  await networkService.DeleteBookmarkFromTheServer("abc");
+            /*storageService.DeleteBookmark("StartupBookmark");
+            storageService.DeleteBookmark("ex");//*/
+            await new BookmarkStateService(versionService, storageService, networkService).UpdateState();
+
+            /*using var textFile = File.OpenRead($"{root}/ex.{BookmarkFileType.BookmarkBody.GetExtension()}");
+            using var imageFile = File.OpenRead($"{root}/ex.{BookmarkFileType.BookmarkImage.GetExtension()}");
+            await networkService.LoadBookmarkToTheServer(
+                textFile,
+                imageFile,
                 "ex2",
                 true);//*/
-            // var result =  await networkService.DeleteBookmarkFromTheServer("abc");
-            var versionService = new BookmarkVersionService();
-            await new BookmarkStateService(versionService, storageService, networkService).UpdateState();
         }
     }
 }

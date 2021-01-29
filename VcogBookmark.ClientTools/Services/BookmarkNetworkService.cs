@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
+using System.Web;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
@@ -24,11 +25,13 @@ namespace VcogBookmark.ClientTools.Services
             _baseUri = new Uri(baseAddress);
         }
         
-        public async Task<BookmarkFolder> GetHierarchy()
+        public async Task<BookmarkFolder> GetHierarchy(string? root = null)
         {
+            root ??= string.Empty;
+            
             const string requestPartialAddress = "bookmarks/hierarchy";
             using var client = new HttpClient {BaseAddress = _baseUri};
-            var responseMessage = await client.GetAsync(requestPartialAddress);
+            var responseMessage = await client.GetAsync($"{requestPartialAddress}?root={root}");
             responseMessage.EnsureSuccessStatusCode();
             var response = await responseMessage.Content.ReadAsStringAsync();
             return _bookmarkHierarchyService.Parse(response);
@@ -61,7 +64,8 @@ namespace VcogBookmark.ClientTools.Services
         public async Task<bool> LoadBookmarkToTheServer(Stream textFile, Stream imageFile, string bookmarkPath,
             bool makeNewBookmark)
         {
-            var bookmarkName = LastSubstring(bookmarkPath, '/');
+            //var bookmarkName = LastSubstring(bookmarkPath, '/');
+            var bookmarkName = Path.GetFileNameWithoutExtension(bookmarkPath);
             using var httpClient = new HttpClient{BaseAddress = _baseUri};
             
             var textContent = new StreamContent(textFile);

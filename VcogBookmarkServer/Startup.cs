@@ -47,7 +47,7 @@ namespace VcogBookmarkServer
                 ContentTypeProvider = provider,
                 OnPrepareResponse = context =>
                 {
-                    context.Context.Response.Headers.Add("File-Last-Modified", context.File.LastModified.ToString("o"));
+                    context.Context.Response.Headers.Add("File-Last-Modified", context.File.LastModified.UtcDateTime.ToString("o"));
                 }
             });
             //app.UseDirectoryBrowser();//app.UseFileServer(enableDirectoryBrowsing: true);
