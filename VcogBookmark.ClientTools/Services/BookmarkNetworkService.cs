@@ -4,9 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.NetworkInformation;
 using System.Threading.Tasks;
-using System.Web;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
@@ -17,21 +15,22 @@ namespace VcogBookmark.ClientTools.Services
     public class BookmarkNetworkService
     {
         private readonly BookmarkHierarchyService _bookmarkHierarchyService;
+        private readonly string _hierarchyRoot;
         private readonly Uri _baseUri;
 
-        public BookmarkNetworkService(string baseAddress, BookmarkHierarchyService bookmarkHierarchyService)
+        public BookmarkNetworkService(string baseAddress, BookmarkHierarchyService bookmarkHierarchyService, string? hierarchyRoot = null)
         {
             _bookmarkHierarchyService = bookmarkHierarchyService;
+            _hierarchyRoot = hierarchyRoot ?? string.Empty;
+            if (_hierarchyRoot.Any(c => c == '\\')) throw new ArgumentException();
             _baseUri = new Uri(baseAddress);
         }
         
-        public async Task<BookmarkFolder> GetHierarchy(string? root = null)
+        public async Task<BookmarkFolder> GetHierarchy()
         {
-            root ??= string.Empty;
-            
             const string requestPartialAddress = "bookmarks/hierarchy";
             using var client = new HttpClient {BaseAddress = _baseUri};
-            var responseMessage = await client.GetAsync($"{requestPartialAddress}?root={root}");
+            var responseMessage = await client.GetAsync($"{requestPartialAddress}?root={_hierarchyRoot}");
             responseMessage.EnsureSuccessStatusCode();
             var response = await responseMessage.Content.ReadAsStringAsync();
             return _bookmarkHierarchyService.Parse(response);
@@ -39,13 +38,15 @@ namespace VcogBookmark.ClientTools.Services
 
         public async Task<FileProfile> GetFile(string filePath, BookmarkFileType fileType)
         {
-            using var client = new HttpClient {BaseAddress = _baseUri};
+            var fullFilePath = Path.Combine(_hierarchyRoot, filePath).Replace('\\', '/');
             var fileExtension = fileType.GetExtension();
-            var responseMessage = await client.GetAsync($"{filePath}.{fileExtension}");
+            
+            using var client = new HttpClient {BaseAddress = _baseUri};
+            var responseMessage = await client.GetAsync($"{fullFilePath}.{fileExtension}");
             responseMessage.EnsureSuccessStatusCode();
             var dataStream = await responseMessage.Content.ReadAsStreamAsync();
             var dateHeaderReceived = responseMessage.Headers.TryGetValues("File-Last-Modified", out var values);
-            if (!dateHeaderReceived) throw new NetworkInformationException();
+            if (!dateHeaderReceived) throw new Exception();
             var date = DateTime.Parse(values!.First()).ToUniversalTime();
             return new FileProfile(dataStream, filePath, fileType, date);
         }
@@ -64,9 +65,7 @@ namespace VcogBookmark.ClientTools.Services
         public async Task<bool> LoadBookmarkToTheServer(Stream textFile, Stream imageFile, string bookmarkPath,
             bool makeNewBookmark)
         {
-            //var bookmarkName = LastSubstring(bookmarkPath, '/');
             var bookmarkName = Path.GetFileNameWithoutExtension(bookmarkPath);
-            using var httpClient = new HttpClient{BaseAddress = _baseUri};
             
             var textContent = new StreamContent(textFile);
             // textContent.Headers
@@ -74,7 +73,8 @@ namespace VcogBookmark.ClientTools.Services
             var imageContent = new StreamContent(imageFile);
             imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
 
-            var stringContent = new StringContent(bookmarkPath);
+            var fullBookmarkPath = Path.Combine(_hierarchyRoot, bookmarkPath).Replace('\\', '/');
+            var stringContent = new StringContent(fullBookmarkPath);
             // stringContent.Headers
 
             var multipartFormDataContent = new MultipartFormDataContent
@@ -83,29 +83,25 @@ namespace VcogBookmark.ClientTools.Services
                 {imageContent, "imageFile", $"{bookmarkName}.{BookmarkFileType.BookmarkImage.GetExtension()}"},
                 {stringContent, "bookmarkPath"},
             };
+            
+            using var httpClient = new HttpClient{BaseAddress = _baseUri};
             var responseMessage = await httpClient.PostAsync(makeNewBookmark? "bookmarks/create" : "bookmarks/update", multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
-
-            string LastSubstring(string s, char c)
-            {
-                var lastIndex = bookmarkPath.LastIndexOf(c);
-                if (lastIndex == -1) lastIndex = 0;
-                return s.Substring(lastIndex, s.Length - lastIndex);
-            }
         }
 
-        public async Task<bool> DeleteBookmarkFromTheServer(string? bookmarkPath = null)
+        public async Task<bool> DeleteBookmarkFromTheServer(string bookmarkPath)
         {
             const string requestPartialAddress = "bookmarks/delete";
-            using var client = new HttpClient {BaseAddress = _baseUri};
             
-            var multipartFormDataContent = new MultipartFormDataContent();
-            if (bookmarkPath != null)
-            {
-                var stringContent = new StringContent(bookmarkPath);
-                multipartFormDataContent.Add(stringContent, "bookmarkPath");
-            }
+            var fullBookmarkPath = Path.Combine(_hierarchyRoot, bookmarkPath).Replace('\\', '/');
+            var stringContent = new StringContent(fullBookmarkPath);
 
+            var multipartFormDataContent = new MultipartFormDataContent
+            {
+                {stringContent, "bookmarkPath"}
+            };
+
+            using var client = new HttpClient {BaseAddress = _baseUri};
             var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
         }

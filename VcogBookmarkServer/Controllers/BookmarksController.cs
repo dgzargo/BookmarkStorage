@@ -74,12 +74,22 @@ namespace VcogBookmarkServer.Controllers
             _storageService.DeleteBookmark(bookmarkPath);
             return Ok();
         }
+        
+        
+
+        [HttpPost("delete-directory")]
+        public IActionResult DeleteDirectory([FromForm]string directoryPath)
+        {
+            directoryPath = directoryPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            _storageService.DeleteDirectoryWithContentWithin(directoryPath);
+            return Ok();
+        }
 
         [HttpGet("hierarchy")]
         public ActionResult<string> Hierarchy([FromQuery]string? root)
         {
             var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
-            return _hierarchyService.ToJson(hierarchy);
+            return _hierarchyService.ToAlignedJson(hierarchy);
         }
         
         private string GetPureFileExtension(string fileName)

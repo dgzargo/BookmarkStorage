@@ -74,8 +74,43 @@ namespace VcogBookmark.Shared.Services
         {
             foreach (var fileProfile in info)
             {
-                File.Delete(fileProfile.GetFullPath(_storageRootDirectory));
+                var fullPath = fileProfile.GetFullPath(_storageRootDirectory);
+                var fileInfo = new FileInfo(fullPath);
+                fileInfo.Attributes = FileAttributes.Normal;
+                fileInfo.Delete();
+                // RecursiveDeleteEmptyDirectories(fileInfo.Directory);
             }
+            // EnsureRootDirectoryExists();
+        }
+
+        #region delete empty directories recursive descending
+
+        public void RecursiveDeleteEmptyDirectories(DirectoryInfo? directoryInfo)
+        {
+            if (directoryInfo == null) return;
+            if (directoryInfo.EnumerateFileSystemInfos().Any()) return; // check if empty
+
+            directoryInfo.Attributes = FileAttributes.Normal;
+            directoryInfo.Delete();
+            RecursiveDeleteEmptyDirectories(directoryInfo.Parent);
+        }
+
+        public void EnsureRootDirectoryExists()
+        {
+            Directory.CreateDirectory(_storageRootDirectory);
+        }
+
+        #endregion
+
+        public void DeleteDirectoryWithContentWithin(string directoryPath)
+        {
+            var dir = new DirectoryInfo(Path.Combine(_storageRootDirectory, directoryPath));
+            DeleteDirectoryWithContentWithin(dir);
+        }
+
+        public void DeleteDirectoryWithContentWithin(DirectoryInfo directoryInfo)
+        {
+            directoryInfo.Delete(true);
         }
         
         public BookmarkFolder GetHierarchy(string root = "")

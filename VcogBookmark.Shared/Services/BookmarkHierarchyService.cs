@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using VcogBookmark.Shared.Models;
 
@@ -22,6 +23,21 @@ namespace VcogBookmark.Shared.Services
                 return bookmarkHierarchyFolder.FolderName == null
                     ? $"[{listOfSerializedChildren}]"
                     : $"{{\"{bookmarkHierarchyFolder.FolderName}\":[{listOfSerializedChildren}]}}";
+            }
+            throw new ArgumentOutOfRangeException(nameof(hierarchy));
+        }
+
+        [Obsolete("just for human eyes")]
+        public string ToAlignedJson(IBookmarkHierarchyElement hierarchy)
+        {
+            if (hierarchy is Bookmark)
+            {
+                return ToJson(hierarchy); // no aligning for one bookmark
+            }
+            if (hierarchy is BookmarkFolder)
+            {
+                var jsonString = ToJson(hierarchy);
+                return JArray.Parse(jsonString).ToString(Formatting.Indented);
             }
             throw new ArgumentOutOfRangeException(nameof(hierarchy));
         }
