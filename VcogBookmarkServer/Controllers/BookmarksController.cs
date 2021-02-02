@@ -1,8 +1,10 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
@@ -12,10 +14,10 @@ namespace VcogBookmarkServer.Controllers
     [ApiController, Route("bookmarks")]
     public class BookmarksController: ControllerBase
     {
-        private readonly StorageService _storageService;
+        private readonly IStorageService _storageService;
         private readonly BookmarkHierarchyService _hierarchyService;
 
-        public BookmarksController(StorageService storageService, BookmarkHierarchyService hierarchyService)
+        public BookmarksController(IStorageService storageService, BookmarkHierarchyService hierarchyService)
         {
             _storageService = storageService;
             _hierarchyService = hierarchyService;
@@ -31,15 +33,13 @@ namespace VcogBookmarkServer.Controllers
             var date = DateTime.UtcNow;
             date = new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, date.Second, date.Kind); // truncate milliseconds off
 
-            // var result = await _storageService.WriteFiles(textFile.OpenReadStream(), imageFile.OpenReadStream(), bookmarkPath, FileWriteMode.CreateNew);
-
-            var result = await _storageService.SaveBookmark(
-                new[]
-                {
-                    Task.FromResult(new FileProfile(textFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkBody, date)),
-                    Task.FromResult(new FileProfile(imageFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkImage, date)),
-                },
-                FileWriteMode.CreateNew);
+            var files = new[]
+            {
+                new FileProfile(textFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkBody, date),
+                new FileProfile(imageFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkImage, date),
+            };
+            var result = await files.Select(task => _storageService.SaveFile(task, FileWriteMode.CreateNew)).GatherResults();
+            //var result = await _storageService.SaveBookmark(files.Select(Task.FromResult), FileWriteMode.CreateNew);
             
             return result ? (IActionResult) Ok() : BadRequest();
         }
@@ -53,16 +53,14 @@ namespace VcogBookmarkServer.Controllers
             bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
             var date = DateTime.UtcNow;
             date = new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, date.Second, date.Kind); // truncate milliseconds off
-
-            // var result = await _storageService.WriteFiles(textFile.OpenReadStream(), imageFile.OpenReadStream(), bookmarkPath, FileWriteMode.Override);
             
-            var result = await _storageService.SaveBookmark(
-                new[]
-                {
-                    Task.FromResult(new FileProfile(textFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkBody, date)),
-                    Task.FromResult(new FileProfile(imageFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkImage, date)),
-                },
-                FileWriteMode.Override);
+            var files = new[]
+            {
+                new FileProfile(textFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkBody, date),
+                new FileProfile(imageFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkImage, date),
+            };
+            var result = await files.Select(task => _storageService.SaveFile(task, FileWriteMode.CreateNew)).GatherResults();
+            //var result = await _storageService.SaveBookmark(files.Select(Task.FromResult), FileWriteMode.CreateNew);
             
             return result ? (IActionResult) Ok() : BadRequest();
         }

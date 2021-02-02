@@ -9,7 +9,17 @@ using static VcogBookmark.Shared.EnumsHelper;
 
 namespace VcogBookmark.Shared.Services
 {
-    public class StorageService
+    public interface IStorageService
+    {
+        Task<bool> SaveFile(FileProfile fileProfileTask, FileWriteMode writeMode);
+        void DeleteBookmark(string bookmarkPath);
+        void DeleteBookmark(IEnumerable<FileProfile> info);
+        void DeleteDirectoryWithContentWithin(string directoryPath);
+        void DeleteDirectoryWithContentWithin(DirectoryInfo directoryInfo);
+        BookmarkFolder GetHierarchy(string root = "");
+    }
+
+    public class StorageService : IStorageService
     {
         private readonly string _storageRootDirectory;
 
@@ -18,24 +28,8 @@ namespace VcogBookmark.Shared.Services
             _storageRootDirectory = storageRootDirectory;
         }
 
-        public async Task<bool> SaveBookmark(IEnumerable<Task<FileProfile>> bookmarkFiles, FileWriteMode writeMode)
+        public async Task<bool> SaveFile(FileProfile fileProfile, FileWriteMode writeMode)
         {
-            var tasks = bookmarkFiles.Select(task => SaveFile(task, writeMode));
-            
-            try
-            {
-                var results = await Task.WhenAll(tasks);
-                return results.All(result => result == true);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-        
-        private async Task<bool> SaveFile(Task<FileProfile> fileProfileTask, FileWriteMode writeMode)
-        {
-            var fileProfile = await fileProfileTask;
             var fileInputStream = fileProfile.Data;
             var pathToSave = fileProfile.GetFullPath(_storageRootDirectory);
             if (writeMode == FileWriteMode.CreateNew && File.Exists(pathToSave))
@@ -53,14 +47,22 @@ namespace VcogBookmark.Shared.Services
                 FileWriteMode.NotStrict => FileMode.Create,
                 _ => throw new ArgumentOutOfRangeException(nameof(writeMode), writeMode, null)
             };
-            Directory.CreateDirectory(Path.GetDirectoryName(pathToSave)!);
-            using (var outputStream = new FileStream(pathToSave, fileMode))
+            try
             {
-                await fileInputStream.CopyToAsync(outputStream);
+                Directory.CreateDirectory(Path.GetDirectoryName(pathToSave)!);
+                using (var outputStream = new FileStream(pathToSave, fileMode))
+                {
+                    await fileInputStream.CopyToAsync(outputStream);
+                }
+
+                File.SetCreationTimeUtc(pathToSave, fileProfile.LastTimeUtc);
+                File.SetLastWriteTimeUtc(pathToSave, fileProfile.LastTimeUtc);
+                return true;
             }
-            File.SetCreationTimeUtc(pathToSave, fileProfile.LastTimeUtc);
-            File.SetLastWriteTimeUtc(pathToSave, fileProfile.LastTimeUtc);
-            return true;
+            catch
+            {
+                return false;
+            }
         }
         
         public void DeleteBookmark(string bookmarkPath)
@@ -85,7 +87,7 @@ namespace VcogBookmark.Shared.Services
 
         #region delete empty directories recursive descending
 
-        public void RecursiveDeleteEmptyDirectories(DirectoryInfo? directoryInfo)
+        private void RecursiveDeleteEmptyDirectories(DirectoryInfo? directoryInfo)
         {
             if (directoryInfo == null) return;
             if (directoryInfo.EnumerateFileSystemInfos().Any()) return; // check if empty
@@ -95,7 +97,7 @@ namespace VcogBookmark.Shared.Services
             RecursiveDeleteEmptyDirectories(directoryInfo.Parent);
         }
 
-        public void EnsureRootDirectoryExists()
+        private void EnsureRootDirectoryExists()
         {
             Directory.CreateDirectory(_storageRootDirectory);
         }

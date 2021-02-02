@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Services;
 
@@ -11,10 +12,10 @@ namespace VcogBookmark.ClientTools.Services
         public TimeSpan UpdateDelay { get; set; }
         private CancellationTokenSource? _cancellationTokenSource;
         private readonly BookmarkVersionService _versionService;
-        private readonly StorageService _storageService;
+        private readonly IStorageService _storageService;
         private readonly BookmarkNetworkService _networkService;
 
-        public BookmarkStateService(BookmarkVersionService versionService, StorageService storageService, BookmarkNetworkService networkService)
+        public BookmarkStateService(BookmarkVersionService versionService, IStorageService storageService, BookmarkNetworkService networkService)
         {
             _versionService = versionService;
             _storageService = storageService;
@@ -42,7 +43,9 @@ namespace VcogBookmark.ClientTools.Services
             return result.All(partialResult => partialResult == true); //*/
             foreach (var newHierarchyElement in newHierarchyElements)
             {
-                var result = await _storageService.SaveBookmark(_networkService.GetAllBookmarkFiles(newHierarchyElement.BookmarkName), FileWriteMode.NotStrict);
+                var bookmarkFiles = _networkService.GetAllBookmarkFiles(newHierarchyElement.BookmarkName);
+                var result = await bookmarkFiles.SelectAsync(task => _storageService.SaveFile(task, FileWriteMode.NotStrict)).GatherResults();
+                //var result = await _storageService.SaveBookmark(bookmarkFiles, FileWriteMode.NotStrict);
                 if (result == false) return false;
             }
             return true;
