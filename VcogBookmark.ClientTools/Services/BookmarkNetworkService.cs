@@ -28,7 +28,7 @@ namespace VcogBookmark.ClientTools.Services
         
         public async Task<BookmarkFolder> GetHierarchy()
         {
-            const string requestPartialAddress = "bookmarks/hierarchy";
+            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.GetHierarchyEndpoint;
             using var client = new HttpClient {BaseAddress = _baseUri};
             var responseMessage = await client.GetAsync($"{requestPartialAddress}?root={_hierarchyRoot}");
             responseMessage.EnsureSuccessStatusCode();
@@ -53,18 +53,15 @@ namespace VcogBookmark.ClientTools.Services
 
         public IEnumerable<Task<FileProfile>> GetAllBookmarkFiles(string filePath)
         {
-            return  EnumsHelper.AllEnumValues<BookmarkFileType>().Select(fileType => GetFile(filePath, fileType));
-        }
-
-        public Task LoadBookmarkToTheServer(IEnumerable<FileProfile> fileProfiles, bool makeNewBookmark)
-        {
-            // var bookmarkPath =
-            throw new NotImplementedException();
+            return  EnumsHelper.AllEnumValues<BookmarkFileType>().Select(fileType => GetFile(filePath, fileType)); // todo
         }
         
         public async Task<bool> LoadBookmarkToTheServer(Stream textFile, Stream imageFile, string bookmarkPath,
             bool makeNewBookmark)
         {
+            const string createPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.CreateEndpoint;
+            const string updatePartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.UpdateEndpoint;
+
             var bookmarkName = Path.GetFileNameWithoutExtension(bookmarkPath);
             
             var textContent = new StreamContent(textFile);
@@ -85,13 +82,13 @@ namespace VcogBookmark.ClientTools.Services
             };
             
             using var httpClient = new HttpClient{BaseAddress = _baseUri};
-            var responseMessage = await httpClient.PostAsync(makeNewBookmark? "bookmarks/create" : "bookmarks/update", multipartFormDataContent);
+            var responseMessage = await httpClient.PostAsync(makeNewBookmark? createPartialAddress : updatePartialAddress, multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
         }
 
         public async Task<bool> DeleteBookmarkFromTheServer(string bookmarkPath)
         {
-            const string requestPartialAddress = "bookmarks/delete";
+            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.DeleteBookmarkEndpoint;
             
             var fullBookmarkPath = Path.Combine(_hierarchyRoot, bookmarkPath).Replace('\\', '/');
             var stringContent = new StringContent(fullBookmarkPath);

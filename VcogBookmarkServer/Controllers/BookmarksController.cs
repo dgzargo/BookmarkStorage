@@ -11,7 +11,7 @@ using VcogBookmark.Shared.Services;
 
 namespace VcogBookmarkServer.Controllers
 {
-    [ApiController, Route("bookmarks")]
+    [ApiController, Route(Endpoints.BookmarkControllerRoute)]
     public class BookmarksController: ControllerBase
     {
         private readonly IStorageService _storageService;
@@ -23,7 +23,7 @@ namespace VcogBookmarkServer.Controllers
             _hierarchyService = hierarchyService;
         }
         
-        [HttpPost("create")]
+        [HttpPost(Endpoints.CreateEndpoint)]
         public async Task<IActionResult> InsertBookmark(IFormFile textFile, IFormFile imageFile, [FromForm]string bookmarkPath)
         {
             if (GetPureFileExtension(textFile.FileName) != "vbm" || imageFile.ContentType != "image/jpeg")
@@ -44,7 +44,7 @@ namespace VcogBookmarkServer.Controllers
             return result ? (IActionResult) Ok() : BadRequest();
         }
 
-        [HttpPost("update")]
+        [HttpPost(Endpoints.UpdateEndpoint)]
         public async Task<IActionResult> UpdateBookmark(IFormFile textFile, IFormFile imageFile, [FromForm] string bookmarkPath)
         {
             if (GetPureFileExtension(textFile.FileName) != "vbm" || imageFile.ContentType != "image/jpeg")
@@ -65,7 +65,7 @@ namespace VcogBookmarkServer.Controllers
             return result ? (IActionResult) Ok() : BadRequest();
         }
 
-        [HttpPost("delete")]
+        [HttpPost(Endpoints.DeleteBookmarkEndpoint)]
         public IActionResult DeleteBookmark([FromForm]string bookmarkPath)
         {
             bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
@@ -75,7 +75,7 @@ namespace VcogBookmarkServer.Controllers
         
         
 
-        [HttpPost("delete-directory")]
+        [HttpPost(Endpoints.DeleteBookmarkFolderEndpoint)]
         public IActionResult DeleteDirectory([FromForm]string directoryPath)
         {
             directoryPath = directoryPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
@@ -83,7 +83,7 @@ namespace VcogBookmarkServer.Controllers
             return Ok();
         }
 
-        [HttpGet("hierarchy")]
+        [HttpGet(Endpoints.GetHierarchyEndpoint)]
         public ActionResult<string> Hierarchy([FromQuery]string? root)
         {
             var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
