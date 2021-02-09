@@ -8,5 +8,6 @@
         public const string DeleteBookmarkEndpoint = "delete-bookmark";
         public const string DeleteBookmarkFolderEndpoint = "delete-directory";
         public const string GetHierarchyEndpoint = "hierarchy";
+        public const string ClearEndpoint = "clear";
     }
 }

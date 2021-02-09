@@ -7,7 +7,7 @@ namespace VcogBookmark.Shared
 {
     public static class AsyncEnumerableExtension
     {
-        public static IEnumerable<Task<TResult>> AsyncSelect<TSource, TResult>(this IEnumerable<Task<TSource>> source, Func<TSource, TResult> selector)
+        public static IEnumerable<Task<TResult>> SelectAsync<TSource, TResult>(this IEnumerable<Task<TSource>> source, Func<TSource, TResult> selector)
         {
             return source.Select(async task => selector(await task));
         }

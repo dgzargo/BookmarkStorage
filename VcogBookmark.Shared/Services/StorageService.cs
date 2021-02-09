@@ -1,25 +1,77 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
-using static VcogBookmark.Shared.EnumsHelper;
 
 namespace VcogBookmark.Shared.Services
 {
     public interface IStorageService
     {
-        Task<bool> SaveFile(FileProfile fileProfileTask, FileWriteMode writeMode);
-        void DeleteBookmark(string bookmarkPath);
-        void DeleteBookmark(IEnumerable<FileProfile> info);
-        void DeleteDirectoryWithContentWithin(string directoryPath);
-        void DeleteDirectoryWithContentWithin(DirectoryInfo directoryInfo);
-        BookmarkFolder GetHierarchy(string root = "");
+        Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode);
+        FilesGroup? Find(Folder folderToSearch, string path);
+        Task<FilesGroup?> Find(string path);
+        Folder? FindFolder(Folder folderToSearch, string path);
+        Task<Folder?> FindFolder(string path);
+        Task<bool> DeleteBookmark(FilesGroup filesGroup);
+        Task<bool> DeleteDirectoryWithContentWithin(Folder folder);
+        Task<Folder> GetHierarchy();
+        Task<bool> Clear(Folder folder);
     }
 
-    public class StorageService : IStorageService
+    public abstract class AbstractStorageService : IStorageService
+    {
+        public abstract Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode);
+
+        public FilesGroup? Find(Folder folderToSearch, string path)
+        {
+            var pathFragments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
+            if (pathFragments.Length == 0) return null;
+            var folder = FindFolder(pathFragments.Take(pathFragments.Length - 1), folderToSearch);
+            return folder?.Children.OfType<FilesGroup>().FirstOrDefault(fg => fg.Name == pathFragments.Last());
+        }
+
+        public async Task<FilesGroup?> Find(string path)
+        {
+            return Find(await GetHierarchy(), path);
+        }
+
+        [SuppressMessage("ReSharper", "PossibleMultipleEnumeration")]
+        private Folder? FindFolder(IEnumerable<string> path, Folder hierarchy)
+        {
+            if (!path.Any()) return hierarchy;
+            var fragmentsLeft = path.Skip(1);
+            var subfolder = hierarchy.Children
+                .OfType<Folder>()
+                .FirstOrDefault(f => f.Name == path.First());
+            if (subfolder == null) return null;
+            return FindFolder(fragmentsLeft, subfolder);
+        }
+
+        
+        public Folder? FindFolder(Folder folderToSearch, string path)
+        {
+            var pathFragments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
+            return FindFolder(pathFragments, folderToSearch);
+        }
+
+        public async Task<Folder?> FindFolder(string path)
+        {
+            return FindFolder(await GetHierarchy(), path);
+        }
+
+        public abstract Task<bool> DeleteBookmark(FilesGroup filesGroup);
+        public abstract Task<bool> DeleteDirectoryWithContentWithin(Folder folder);
+        public abstract Task<Folder> GetHierarchy();
+        public abstract Task<bool> Clear(Folder folder);
+    }
+
+    public class StorageService : AbstractStorageService, IFileDataProviderService
     {
         private readonly string _storageRootDirectory;
 
@@ -28,10 +80,17 @@ namespace VcogBookmark.Shared.Services
             _storageRootDirectory = storageRootDirectory;
         }
 
-        public async Task<bool> SaveFile(FileProfile fileProfile, FileWriteMode writeMode)
+        
+        public override Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode)
         {
-            var fileInputStream = fileProfile.Data;
-            var pathToSave = fileProfile.GetFullPath(_storageRootDirectory);
+            return filesGroup.RelatedFiles
+                .Select(profile => SaveFile(profile, writeMode))
+                .GatherResults();
+        }
+        private async Task<bool> SaveFile(FileProfile fileProfile, FileWriteMode writeMode)
+        {
+            var fileInputStream = await fileProfile.GetData();
+            var pathToSave = GetFullPath(fileProfile);
             if (writeMode == FileWriteMode.CreateNew && File.Exists(pathToSave))
             {
                 return false;
@@ -64,91 +123,123 @@ namespace VcogBookmark.Shared.Services
                 return false;
             }
         }
-        
-        public void DeleteBookmark(string bookmarkPath)
+
+        public override Task<bool> DeleteBookmark(FilesGroup filesGroup)
         {
-            var fileProfiles = AllEnumValues<BookmarkFileType>()
-                .Select(type => new FileProfile(Stream.Null, bookmarkPath, type, DateTime.Now)); // todo: rework for bookmarks of different kind
-            DeleteBookmark(fileProfiles);
-        }
-        
-        public void DeleteBookmark(IEnumerable<FileProfile> info)
-        {
-            foreach (var fileProfile in info)
+            foreach (var fileProfile in filesGroup.RelatedFiles)
             {
-                var fullPath = fileProfile.GetFullPath(_storageRootDirectory);
+                var fullPath = GetFullPath(fileProfile);
                 var fileInfo = new FileInfo(fullPath);
                 fileInfo.Attributes = FileAttributes.Normal;
                 fileInfo.Delete();
                 // RecursiveDeleteEmptyDirectories(fileInfo.Directory);
             }
             // EnsureRootDirectoryExists();
-        }
-
-        #region delete empty directories recursive descending
-
-        private void RecursiveDeleteEmptyDirectories(DirectoryInfo? directoryInfo)
-        {
-            if (directoryInfo == null) return;
-            if (directoryInfo.EnumerateFileSystemInfos().Any()) return; // check if empty
-
-            directoryInfo.Attributes = FileAttributes.Normal;
-            directoryInfo.Delete();
-            RecursiveDeleteEmptyDirectories(directoryInfo.Parent);
-        }
-
-        private void EnsureRootDirectoryExists()
-        {
-            Directory.CreateDirectory(_storageRootDirectory);
-        }
-
-        #endregion
-
-        public void DeleteDirectoryWithContentWithin(string directoryPath)
-        {
-            var dir = new DirectoryInfo(Path.Combine(_storageRootDirectory, directoryPath));
-            DeleteDirectoryWithContentWithin(dir);
-        }
-
-        public void DeleteDirectoryWithContentWithin(DirectoryInfo directoryInfo)
-        {
-            directoryInfo.Delete(true);
+            return Task.FromResult(true);
         }
         
-        public BookmarkFolder GetHierarchy(string root = "")
+        private void RecursiveDeleteEmptyDirectories(Folder? folder)
         {
-            var rootPath = Path.Combine(_storageRootDirectory, root);
-            if (!Directory.Exists(rootPath))
-            {
-                return new BookmarkFolder(null, new HashSet<IBookmarkHierarchyElement>()); // 0
-            }
+            if (folder == null) return;
+            var directoryInfo = new DirectoryInfo(GetFullPath(folder));
+            if (directoryInfo.EnumerateFileSystemInfos().Any()) return; // check if empty
+            directoryInfo.Attributes = FileAttributes.Normal;
+            directoryInfo.Delete();
+            RecursiveDeleteEmptyDirectories(folder.Parent);
+        }
 
-            var directoryNames = Directory.GetDirectories(rootPath);
-            var fileNames = Directory.GetFiles(rootPath);
-            
-            var children = new HashSet<IBookmarkHierarchyElement>(); // directoryNames.Length + fileNames.Length / 2
+        public override Task<bool> DeleteDirectoryWithContentWithin(Folder folder)
+        {
+            Directory.Delete(GetFullPath(folder), true);
+            return Task.FromResult(true);
+        }
 
-            foreach (var fileName in fileNames)
+        public override Task<Folder> GetHierarchy()
+        {
+            return Directory.Exists(_storageRootDirectory)
+                ? Task.FromResult(GetHierarchy(_storageRootDirectory))
+                : throw new Exception("root directory does not exist!");
+        }
+
+        private Folder GetHierarchy(string fullPath) // the folder must exist
+        {
+            var directoryNames = Directory.GetDirectories(fullPath);
+            var fileNames = Directory.GetFiles(fullPath);
+
+            var folder = new Folder(null) {ProviderService = this};
+
+            foreach (var filePath in fileNames)
             {
-                if (fileName.EndsWith(".vbm") && File.Exists($"{fileName.Substring(0, fileName.LastIndexOf('.'))}.jpg"))
+                if (filePath.EndsWith(".vbm") && File.Exists($"{filePath.Substring(0, filePath.LastIndexOf('.'))}.jpg"))
                 {
-                    var lastWriteTime = File.GetLastWriteTimeUtc(fileName);
+                    var lastWriteTime = File.GetLastWriteTimeUtc(filePath);
                     var lastWriteTimeTrimmed = new DateTime(lastWriteTime.Year, lastWriteTime.Month, lastWriteTime.Day, lastWriteTime.Hour, lastWriteTime.Minute, lastWriteTime.Second, lastWriteTime.Kind);
-                    var filename = NewStandardExtensions.GetRelativePath(_storageRootDirectory, fileName);
-                    var pureFilename = Path.GetFileNameWithoutExtension(filename);
-                    var bookmark = new Bookmark(pureFilename, lastWriteTimeTrimmed);
-                    children.Add(bookmark);
+                    var pureFilename = Path.GetFileNameWithoutExtension(filePath);
+                    var bookmark = new Bookmark(pureFilename, lastWriteTimeTrimmed)
+                    {
+                        Parent = folder,
+                        ProviderService = this,
+                    };
+                    folder.Children.Add(bookmark);
                 }
             }
 
-            foreach (var directoryName in directoryNames)
+            foreach (var subDirectoryPath in directoryNames)
             {
-                var directoryHierarchy = GetHierarchy(NewStandardExtensions.GetRelativePath(_storageRootDirectory, directoryName));
-                directoryHierarchy.FolderName = NewStandardExtensions.GetRelativePath(rootPath, directoryName);
-                children.Add(directoryHierarchy);
+                var subDir = GetHierarchy(subDirectoryPath);
+                subDir.Name = Path.GetFileName(subDirectoryPath) ?? string.Empty;
+                subDir.Parent = folder;
+                folder.Children.Add(subDir);
             }
 
-            return new BookmarkFolder(null, children);
+            return folder;
+        }
+
+        public override async Task<bool> Clear(Folder folder)
+        {
+            var thisFolder = await FindFolder(folder.LocalPath);
+            if (thisFolder == null) return true; // it doesn't exist so it's already clean
+            
+            var registeredFiles = thisFolder.Children
+                .OfType<FilesGroup>()
+                .SelectMany(group => group.RelatedFiles)
+                .Select(GetFullPath);
+            var presentFiles = Directory.EnumerateFiles(GetFullPath(folder));
+            var exceptedFiles = presentFiles.Except(registeredFiles);
+            
+            foreach (var exceptedFile in exceptedFiles)
+            {
+                var fileInfo = new FileInfo(exceptedFile);
+                fileInfo.Attributes = FileAttributes.Normal;
+                fileInfo.Delete();
+            }
+
+            return await folder.Children.OfType<Folder>().Select(Clear).GatherResults();
+        }
+
+        public Task<Stream> GetData(FileProfile fileProfile)
+        {
+            var stream = new FileStream(GetFullPath(fileProfile), FileMode.Open, FileAccess.Read);
+            return Task.FromResult<Stream>(stream);
+        }
+
+        private string GetFullPath(FileProfile fileProfile)
+        {
+            return GetFullPath($"{fileProfile.LocalPath}.{fileProfile.FileType.GetExtension()}");
+        }
+        private string GetFullPath(BookmarkHierarchyElement hierarchyElement)
+        {
+            return GetFullPath(hierarchyElement.LocalPath);
+        }
+        private string GetFullPath(string partialPath)
+        {
+            partialPath = partialPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            return Path.Combine(_storageRootDirectory, partialPath);
+        }
+        private string GetFullPath(string root, string partialPath)
+        {
+            var localPath = Path.Combine(root, partialPath);
+            return GetFullPath(localPath);
         }
     }
 }

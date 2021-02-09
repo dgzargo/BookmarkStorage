@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
 
 namespace VcogBookmark.ClientTools.Services
@@ -12,42 +14,41 @@ namespace VcogBookmark.ClientTools.Services
         public TimeSpan UpdateDelay { get; set; }
         private CancellationTokenSource? _cancellationTokenSource;
         private readonly BookmarkVersionService _versionService;
-        private readonly IStorageService _storageService;
-        private readonly BookmarkNetworkService _networkService;
+        private readonly IStorageService _targetStorageService;
+        private readonly IStorageService _sourceStorageService;
 
-        public BookmarkStateService(BookmarkVersionService versionService, IStorageService storageService, BookmarkNetworkService networkService)
+        public BookmarkStateService(BookmarkVersionService versionService, IStorageService targetStorageService, IStorageService sourceStorageService)
         {
             _versionService = versionService;
-            _storageService = storageService;
-            _networkService = networkService;
+            _targetStorageService = targetStorageService;
+            _sourceStorageService = sourceStorageService;
             UpdateDelay = TimeSpan.FromMinutes(15);
         }
 
         public async Task<bool> UpdateState()
         {
-            var serverBookmarkFolder = await _networkService.GetHierarchy();
-            var clientBookmarkFolder = _storageService.GetHierarchy();
+            var sourceHierarchy = await _sourceStorageService.GetHierarchy();
+            var targetHierarchy = await _targetStorageService.GetHierarchy();
+
+            var obsoleteHierarchyElements = _versionService.ObsoleteBookmarks(sourceHierarchy, targetHierarchy).GetUnwrapped().ToArray();
+            var newHierarchyElements = _versionService.NewBookmarks(sourceHierarchy, targetHierarchy).GetUnwrapped().ToArray();
             
-            var obsoleteHierarchyElements = _versionService.ObsoleteBookmarks(serverBookmarkFolder, clientBookmarkFolder).GetUnwrappedBookmarks();
-            var newHierarchyElements = _versionService.NewBookmarks(serverBookmarkFolder, clientBookmarkFolder).GetUnwrappedBookmarks();
-            
-            foreach (var obsoleteHierarchyElement in obsoleteHierarchyElements)
+            foreach (var obsoleteHierarchyElement in obsoleteHierarchyElements.OfType<FilesGroup>())
             {
-                _storageService.DeleteBookmark(obsoleteHierarchyElement.BookmarkName);
+                await _targetStorageService.DeleteBookmark(obsoleteHierarchyElement);
             }
 
-            /*var bookmarkSavingTasks = newHierarchyElements.Select(newHierarchyElement =>
-                _storageService.SaveBookmark(_networkService.GetAllBookmarkFiles(newHierarchyElement.BookmarkName),
-                    FileWriteMode.NotStrict));
-            var result = await Task.WhenAll(bookmarkSavingTasks);
-            return result.All(partialResult => partialResult == true); //*/
-            foreach (var newHierarchyElement in newHierarchyElements)
+            foreach (var newHierarchyElement in newHierarchyElements.OfType<FilesGroup>())
             {
-                var bookmarkFiles = _networkService.GetAllBookmarkFiles(newHierarchyElement.BookmarkName);
-                var result = await bookmarkFiles.SelectAsync(task => _storageService.SaveFile(task, FileWriteMode.NotStrict)).GatherResults();
-                //var result = await _storageService.SaveBookmark(bookmarkFiles, FileWriteMode.NotStrict);
+                var result = await _targetStorageService.Save(newHierarchyElement, FileWriteMode.CreateNew);
                 if (result == false) return false;
             }
+            
+            /*foreach (var folder in obsoleteHierarchyElements.OfType<Folder>().Where(folder => folder.Children.Count == 0))
+            {
+                await _targetStorageService.DeleteDirectoryWithContentWithin(folder);
+            }// todo: clear all obsolete folders and make new */ 
+            
             return true;
         }
 
@@ -64,8 +65,11 @@ namespace VcogBookmark.ClientTools.Services
             }
             while (true)
             {
-                await UpdateState();
-                await Task.Delay(UpdateDelay, _cancellationTokenSource.Token);
+                var stateSuccessfullyUpdated = await UpdateState();
+                if (stateSuccessfullyUpdated)
+                {
+                    await Task.Delay(UpdateDelay, _cancellationTokenSource.Token);
+                }
                 if (_cancellationTokenSource.IsCancellationRequested)
                 {
                     break;

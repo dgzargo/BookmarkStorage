@@ -8,33 +8,33 @@ using VcogBookmark.Shared.Models;
 
 namespace VcogBookmark.Shared.Services
 {
-    public class BookmarkHierarchyService
+    public class BookmarkHierarchyUtils
     {
-        public string ToJson(IBookmarkHierarchyElement hierarchy)
+        public string ToJson(BookmarkHierarchyElement hierarchy)
         {
-            if (hierarchy is Bookmark bookmarkHierarchyBookmark)
+            if (hierarchy is FilesGroup bookmarkHierarchyBookmark)
             {
-                return $"\"{bookmarkHierarchyBookmark.BookmarkName}@{bookmarkHierarchyBookmark.LastTime:o}\"";
+                return $"\"{bookmarkHierarchyBookmark.Name}@{bookmarkHierarchyBookmark.LastTime:o}\"";
                 //return $"\"{bookmarkHierarchyBookmark.BookmarkName}\"";
             }
-            if (hierarchy is BookmarkFolder bookmarkHierarchyFolder)
+            if (hierarchy is Folder bookmarkHierarchyFolder)
             {
                 var listOfSerializedChildren = string.Join(",", bookmarkHierarchyFolder.Children.Select(ToJson));
-                return bookmarkHierarchyFolder.FolderName == null
+                return string.IsNullOrWhiteSpace(bookmarkHierarchyFolder.Name)
                     ? $"[{listOfSerializedChildren}]"
-                    : $"{{\"{bookmarkHierarchyFolder.FolderName}\":[{listOfSerializedChildren}]}}";
+                    : $"{{\"{bookmarkHierarchyFolder.Name}\":[{listOfSerializedChildren}]}}";
             }
             throw new ArgumentOutOfRangeException(nameof(hierarchy));
         }
 
         [Obsolete("just for human eyes")]
-        public string ToAlignedJson(IBookmarkHierarchyElement hierarchy)
+        public string ToAlignedJson(BookmarkHierarchyElement hierarchy)
         {
-            if (hierarchy is Bookmark)
+            if (hierarchy is FilesGroup)
             {
                 return ToJson(hierarchy); // no aligning for one bookmark
             }
-            if (hierarchy is BookmarkFolder)
+            if (hierarchy is Folder)
             {
                 var jsonString = ToJson(hierarchy);
                 return JArray.Parse(jsonString).ToString(Formatting.Indented);
@@ -42,15 +42,15 @@ namespace VcogBookmark.Shared.Services
             throw new ArgumentOutOfRangeException(nameof(hierarchy));
         }
 
-        public BookmarkFolder Parse(string jsonString)
+        public Folder Parse(string jsonString)
         {
             var jsonArray = JArray.Parse(jsonString);
             return Parse(jsonArray);
         }
 
-        private BookmarkFolder Parse(JArray jsonArray)
+        private Folder Parse(JArray jsonArray)
         {
-            var children = new HashSet<IBookmarkHierarchyElement>(); // jsonArray.Count
+            var folder = new Folder(null);
             
             foreach (var jToken in jsonArray)
             {
@@ -59,7 +59,8 @@ namespace VcogBookmark.Shared.Services
                     var bookmarkData = jToken.ToString().Split('@');
                     if (bookmarkData.Length != 2) throw new FormatException("wrong bookmark format!");
                     var bookmark = new Bookmark(bookmarkData[0], DateTime.Parse(bookmarkData[1]).ToUniversalTime());
-                    children.Add(bookmark);
+                    bookmark.Parent = folder;
+                    folder.Children.Add(bookmark);
                 }
                 if (jToken.Type == JTokenType.Object)
                 {
@@ -68,12 +69,13 @@ namespace VcogBookmark.Shared.Services
                     var folderName = firstProperty.Name;
                     var innerJsonArray = (JArray) firstProperty.Value;
                     var innerBookmarkFolder = Parse(innerJsonArray);
-                    innerBookmarkFolder.FolderName = folderName;
-                    children.Add(innerBookmarkFolder);
+                    innerBookmarkFolder.Name = folderName;
+                    innerBookmarkFolder.Parent = folder;
+                    folder.Children.Add(innerBookmarkFolder);
                 }
             }
 
-            return new BookmarkFolder(null, children);
+            return folder;
         }
     }
 }

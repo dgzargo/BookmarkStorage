@@ -11,14 +11,19 @@ namespace Client
 {
     class Program
     {
+        private const bool UseLocalServer = true;
+        private const string VisportServerAddress = "http://lv.visco.no:8282/VcogBookmarkServer/";
+        private const string LocalServerAddress = "https://localhost:5001/";
+        private const string ServerAddressToUse = UseLocalServer ? LocalServerAddress : VisportServerAddress;
         static async Task Main(string[] args)
         {
-            var bookmarkHierarchyService = new BookmarkHierarchyService();
-            var networkService = new BookmarkNetworkService("http://193.84.22.46:8282/VcogBookmarkServer/", bookmarkHierarchyService);// "https://localhost:5001/"
+            var bookmarkHierarchyService = new BookmarkHierarchyUtils();
+            var networkService = new BookmarkNetworkService(ServerAddressToUse, bookmarkHierarchyService);
             var root = Directory.GetCurrentDirectory() ?? throw new Exception();
-            var storageService = new StorageService(root);
+            var storageService = new StorageService(root + @"\root");
             var versionService = new BookmarkVersionService();
-            
+
+            // var f = storageService.Find(@"/root/test/Test2 - Copy");
             // await storageService.SaveBookmark(networkService.GetAllBookmarkFiles("ex"), FileWriteMode.NotStrict);
             // var result =  await networkService.DeleteBookmarkFromTheServer("abc");
             /*storageService.DeleteBookmark("StartupBookmark");

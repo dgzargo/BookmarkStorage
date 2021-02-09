@@ -8,6 +8,7 @@ using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
+using VcogBookmarkServer.Services;
 
 namespace VcogBookmarkServer.Controllers
 {
@@ -15,79 +16,78 @@ namespace VcogBookmarkServer.Controllers
     public class BookmarksController: ControllerBase
     {
         private readonly IStorageService _storageService;
-        private readonly BookmarkHierarchyService _hierarchyService;
+        private readonly BookmarkHierarchyUtils _hierarchyUtils;
 
-        public BookmarksController(IStorageService storageService, BookmarkHierarchyService hierarchyService)
+        public BookmarksController(IStorageService storageService, BookmarkHierarchyUtils hierarchyUtils)
         {
             _storageService = storageService;
-            _hierarchyService = hierarchyService;
+            _hierarchyUtils = hierarchyUtils;
         }
         
         [HttpPost(Endpoints.CreateEndpoint)]
-        public async Task<IActionResult> InsertBookmark(IFormFile textFile, IFormFile imageFile, [FromForm]string bookmarkPath)
+        public Task<IActionResult> InsertBookmark(IFormFileCollection formFileCollection, [FromForm]string bookmarkPath, [FromServices] GroupFilesDataService dataService)
         {
-            if (GetPureFileExtension(textFile.FileName) != "vbm" || imageFile.ContentType != "image/jpeg")
-                return BadRequest();
-            
-            bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            var date = DateTime.UtcNow;
-            date = new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, date.Second, date.Kind); // truncate milliseconds off
-
-            var files = new[]
-            {
-                new FileProfile(textFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkBody, date),
-                new FileProfile(imageFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkImage, date),
-            };
-            var result = await files.Select(task => _storageService.SaveFile(task, FileWriteMode.CreateNew)).GatherResults();
-            //var result = await _storageService.SaveBookmark(files.Select(Task.FromResult), FileWriteMode.CreateNew);
-            
-            return result ? (IActionResult) Ok() : BadRequest();
+            return StoreBookmark(formFileCollection, bookmarkPath, DateTime.UtcNow, dataService, FileWriteMode.CreateNew);
         }
 
         [HttpPost(Endpoints.UpdateEndpoint)]
-        public async Task<IActionResult> UpdateBookmark(IFormFile textFile, IFormFile imageFile, [FromForm] string bookmarkPath)
+        public Task<IActionResult> UpdateBookmark(IFormFileCollection formFileCollection, [FromForm] string bookmarkPath, [FromServices] GroupFilesDataService dataService)
         {
-            if (GetPureFileExtension(textFile.FileName) != "vbm" || imageFile.ContentType != "image/jpeg")
-                return BadRequest();
+            return StoreBookmark(formFileCollection, bookmarkPath, DateTime.UtcNow, dataService, FileWriteMode.Override);
+        }
 
+        private async Task<IActionResult> StoreBookmark(IFormFileCollection formFileCollection, string bookmarkPath, DateTime lastWriteDate,
+            GroupFilesDataService dataService, FileWriteMode writeMode)
+        {
             bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            var date = DateTime.UtcNow;
-            date = new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, date.Second, date.Kind); // truncate milliseconds off
+            lastWriteDate = new DateTime(lastWriteDate.Year, lastWriteDate.Month, lastWriteDate.Day, lastWriteDate.Hour, lastWriteDate.Minute, lastWriteDate.Second, lastWriteDate.Kind); // truncate milliseconds off
             
-            var files = new[]
+            foreach (var formFile in formFileCollection)
             {
-                new FileProfile(textFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkBody, date),
-                new FileProfile(imageFile.OpenReadStream(), bookmarkPath, BookmarkFileType.BookmarkImage, date),
-            };
-            var result = await files.Select(task => _storageService.SaveFile(task, FileWriteMode.CreateNew)).GatherResults();
-            //var result = await _storageService.SaveBookmark(files.Select(Task.FromResult), FileWriteMode.CreateNew);
-            
+                var formFileHeader = formFile.Headers["Extension"];
+                dataService.Add(EnumsHelper.ParseType(formFileHeader), formFile.OpenReadStream());
+            }
+
+            var fileTypes = formFileCollection.Select(formFile => formFile.Headers["Extension"].ToString()).Select(EnumsHelper.ParseType).ToArray();
+            FilesGroup filesGroup;
+            if (fileTypes.Contains(BookmarkFileType.BookmarkBody) && fileTypes.Contains(BookmarkFileType.BookmarkImage))
+            {
+                filesGroup = new Bookmark(bookmarkPath, lastWriteDate) {ProviderService = dataService};
+            }
+            else
+            {
+                return BadRequest("bookmark type isn't recognized");
+            }
+            var result = await _storageService.Save(filesGroup, writeMode);
             return result ? (IActionResult) Ok() : BadRequest();
         }
-
+        
         [HttpPost(Endpoints.DeleteBookmarkEndpoint)]
-        public IActionResult DeleteBookmark([FromForm]string bookmarkPath)
+        public async Task<IActionResult> DeleteBookmark([FromForm]string bookmarkPath)
         {
             bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            _storageService.DeleteBookmark(bookmarkPath);
-            return Ok();
+            var filesGroup = await _storageService.Find(bookmarkPath);
+            if (filesGroup == null) return BadRequest();
+            var deletionResult = await _storageService.DeleteBookmark(filesGroup);
+            return deletionResult ? (IActionResult) Ok() : BadRequest();
         }
-        
-        
 
         [HttpPost(Endpoints.DeleteBookmarkFolderEndpoint)]
-        public IActionResult DeleteDirectory([FromForm]string directoryPath)
+        public async Task<IActionResult> DeleteDirectory([FromForm]string directoryPath)
         {
             directoryPath = directoryPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            _storageService.DeleteDirectoryWithContentWithin(directoryPath);
-            return Ok();
+            var folder = await _storageService.FindFolder(directoryPath);
+            if (folder == null) return BadRequest();
+            var deletionResult = await _storageService.DeleteDirectoryWithContentWithin(folder);
+            return deletionResult ? (IActionResult) Ok() : BadRequest();
         }
 
         [HttpGet(Endpoints.GetHierarchyEndpoint)]
-        public ActionResult<string> Hierarchy([FromQuery]string? root)
+        public async Task<ActionResult<string>> Hierarchy([FromQuery]string? root)
         {
-            var hierarchy = _storageService.GetHierarchy(root ?? string.Empty);
-            return _hierarchyService.ToAlignedJson(hierarchy);
+            var foundFolder = await _storageService.FindFolder(root ?? string.Empty);
+            if (foundFolder == null) return BadRequest();
+            return _hierarchyUtils.ToAlignedJson(foundFolder);
         }
         
         private string GetPureFileExtension(string fileName)

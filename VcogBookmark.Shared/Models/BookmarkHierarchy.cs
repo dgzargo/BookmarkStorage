@@ -1,87 +1,66 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Services;
 
 namespace VcogBookmark.Shared.Models
 {
-    public interface IBookmarkHierarchyElement
+    public abstract class BookmarkHierarchyElement
     {
-    }
-
-    public class BookmarkFolder: IBookmarkHierarchyElement
-    {
-        public BookmarkFolder(string? folderName, HashSet<IBookmarkHierarchyElement> children)
+        protected BookmarkHierarchyElement(string name)
         {
-            FolderName = folderName;
-            Children = children;
+            Name = name;
         }
 
-        public string? FolderName { get; set; }
-        public HashSet<IBookmarkHierarchyElement> Children { get; }
-
-        public IEnumerable<Bookmark> GetUnwrappedBookmarks()
+        public Folder? Parent { get; set; }
+        public string Name { get; set; }
+        public string LocalPath => Parent is null ? Name : $"{Parent.LocalPath}/{Name}";
+        public IFileDataProviderService? ProviderService { get; set; }
+        public IFileDataProviderService ProviderServiceInherited
         {
-            foreach (var (nameList, time) in GetUnwrappedBookmarksWithoutFolderName())
+            get
             {
-                yield return new Bookmark(string.Join("/", nameList), time);
+                if (ProviderService != null) return ProviderService;
+                if (Parent == null) throw new Exception($"inherited {nameof(IFileDataProviderService)} doesn't exist");
+                return Parent.ProviderServiceInherited;
             }
+        }
+    }
+
+    public class Folder: BookmarkHierarchyElement
+    {
+        public Folder(string? folderName) : base(folderName ?? string.Empty)
+        {
+            Children = new List<BookmarkHierarchyElement>();
         }
         
-        private IEnumerable<(List<string>, DateTime LastTime)> GetUnwrappedBookmarksWithoutFolderName()
+        public ICollection<BookmarkHierarchyElement> Children { get; }
+
+        public IEnumerable<BookmarkHierarchyElement> GetUnwrapped()
         {
-            foreach (var child in Children)
-            {
-                if (child is Bookmark bookmark)
-                {
-                    yield return (new List<string>(5) {bookmark.BookmarkName}, bookmark.LastTime);
-                    continue;
-                }
-
-                if (child is BookmarkFolder folder)
-                {
-                    foreach (var valueTuple in folder.GetUnwrappedBookmarksWithoutFolderName())
-                    {
-                        valueTuple.Item1.Add(folder.FolderName!);
-                        yield return valueTuple;
-                    }
-                    continue;
-                }
-
-                throw new NotImplementedException("some type was added");
-            }
+            return Children.Concat(Children.OfType<Folder>().SelectMany(folder => folder.GetUnwrapped()));
         }
     }
 
-    public class Bookmark: IBookmarkHierarchyElement
+    public abstract class FilesGroup: BookmarkHierarchyElement
     {
-        private sealed class BookmarkNameLastTimeEqualityComparer : IEqualityComparer<Bookmark>
+        protected FilesGroup(string bookmarkName, DateTime lastTime) : base(bookmarkName)
         {
-            public bool Equals(Bookmark? x, Bookmark? y)
-            {
-                if (ReferenceEquals(x, y)) return true;
-                if (ReferenceEquals(x, null)) return false;
-                if (ReferenceEquals(y, null)) return false;
-                if (x.GetType() != y.GetType()) return false;
-                return x.BookmarkName == y.BookmarkName && Nullable.Equals(x.LastTime, y.LastTime);
-            }
-
-            public int GetHashCode(Bookmark obj)
-            {
-                unchecked
-                {
-                    return (obj.BookmarkName.GetHashCode() * 397) ^ obj.LastTime.GetHashCode();
-                }
-            }
-        }
-
-        public static IEqualityComparer<Bookmark> BookmarkNameLastTimeComparer { get; } = new BookmarkNameLastTimeEqualityComparer();
-
-        public Bookmark(string bookmarkName, DateTime lastTime)
-        {
-            BookmarkName = bookmarkName;
             LastTime = lastTime;
         }
-
-        public string BookmarkName { get; }
         public DateTime LastTime { get; }
+        protected abstract IEnumerable<BookmarkFileType> FileTypes { get; }
+        public IEnumerable<FileProfile> RelatedFiles => FileTypes.Select(type => new FileProfile(LocalPath, type, LastTime, ProviderServiceInherited));
+    }
+
+    public class Bookmark : FilesGroup
+    {
+        public Bookmark(string bookmarkName, DateTime lastTime) : base(bookmarkName, lastTime)
+        {
+            FileTypes = new[] {BookmarkFileType.BookmarkBody, BookmarkFileType.BookmarkImage};
+        }
+
+        protected override IEnumerable<BookmarkFileType> FileTypes { get; }
     }
 }

@@ -7,35 +7,91 @@ namespace VcogBookmark.ClientTools.Services
 {
     public class BookmarkVersionService
     {
-        public BookmarkFolder ObsoleteBookmarks(BookmarkFolder serverBookmarkFolder, BookmarkFolder clientBookmarkFolder)
+        private static IEqualityComparer<BookmarkHierarchyElement> _comparer = new BookmarkHierarchyElementEqualityComparer();
+        public Folder ObsoleteBookmarks(Folder serverFolder, Folder clientFolder)
         {
-            return ExceptBookmarkHierarchy(serverBookmarkFolder, clientBookmarkFolder);
+            return ExceptBookmarkHierarchy(clientFolder, serverFolder);
         }
         
-        public BookmarkFolder NewBookmarks(BookmarkFolder serverBookmarkFolder, BookmarkFolder clientBookmarkFolder)
+        public Folder NewBookmarks(Folder serverFolder, Folder clientFolder)
         {
-            return ExceptBookmarkHierarchy(clientBookmarkFolder, serverBookmarkFolder);
+            return ExceptBookmarkHierarchy(serverFolder, clientFolder);
         }
 
-        protected BookmarkFolder ExceptBookmarkHierarchy(BookmarkFolder minuendBookmarkFolder,
-            BookmarkFolder subtrahendBookmarkFolder)
+        private Folder ExceptBookmarkHierarchy(Folder minuendFolder, Folder subtrahendFolder)
         {
-            if (minuendBookmarkFolder.FolderName != subtrahendBookmarkFolder.FolderName) throw new ArgumentException("folder names are different!");
+            if (minuendFolder.Name != subtrahendFolder.Name) throw new ArgumentException("folder names are different!");
 
-            var exceptedHierarchyElements = subtrahendBookmarkFolder.Children.OfType<Bookmark>()
-                    .Except(minuendBookmarkFolder.Children.OfType<Bookmark>(), Bookmark.BookmarkNameLastTimeComparer);
-            var exceptedHierarchyHashSet = new HashSet<IBookmarkHierarchyElement>(exceptedHierarchyElements);
-
-            var minuendFolders = minuendBookmarkFolder.Children.OfType<BookmarkFolder>().ToArray();
-            foreach (var subtrahendFolder in subtrahendBookmarkFolder.Children.OfType<BookmarkFolder>())
+            var folder = new Folder(minuendFolder.Name);
+            
+            var exceptedHierarchyElements = minuendFolder.Children.Except(subtrahendFolder.Children, _comparer);
+            foreach (var exceptedHierarchyElement in exceptedHierarchyElements)
             {
-                var correspondingMinuendFolder = minuendFolders.FirstOrDefault(element => element.FolderName == subtrahendFolder.FolderName);
-                if (correspondingMinuendFolder is null) continue;
-                var exceptedHierarchy = ExceptBookmarkHierarchy(correspondingMinuendFolder, subtrahendFolder);
-                exceptedHierarchyHashSet.Add(exceptedHierarchy);
+                folder.Children.Add(exceptedHierarchyElement);
             }
 
-            return new BookmarkFolder(minuendBookmarkFolder.FolderName, exceptedHierarchyHashSet);
+            var untouchedFolders = IntersectionOfFolders(minuendFolder, subtrahendFolder);
+            foreach (var untouchedFolderName in untouchedFolders)
+            {
+                var minuendSubFolder = minuendFolder.Children.OfType<Folder>().First(subFolder => subFolder.Name == untouchedFolderName);
+                var subtrahendSubFolder = subtrahendFolder.Children.OfType<Folder>().First(subFolder => subFolder.Name == untouchedFolderName);
+                folder.Children.Add(ExceptBookmarkHierarchy(minuendSubFolder, subtrahendSubFolder));
+            }
+            /*var minuendFolders = minuendFolder.Children.OfType<Folder>().ToArray();
+            foreach (var subtrahendSubFolder in subtrahendFolder.Children.OfType<Folder>())
+            {
+                var correspondingMinuendFolder = minuendFolders.FirstOrDefault(element => element.Name == subtrahendSubFolder.Name);
+                if (correspondingMinuendFolder is null) continue;
+                var exceptedHierarchy = ExceptBookmarkHierarchy(correspondingMinuendFolder, subtrahendSubFolder);
+                folder.Children.Add(exceptedHierarchy);
+            }//*/
+
+            return folder;
+
+            IEnumerable<string> IntersectionOfFolders(Folder x, Folder y)
+            {
+                var xFolders = x.Children.OfType<Folder>();
+                var yFolders = y.Children.OfType<Folder>();
+                return xFolders.Intersect(yFolders, _comparer).Select(element => element.Name);
+            }
+        }
+        
+        private sealed class BookmarkHierarchyElementEqualityComparer : IEqualityComparer<BookmarkHierarchyElement>
+        {
+            public bool Equals(BookmarkHierarchyElement? x, BookmarkHierarchyElement? y)
+            {
+                if (ReferenceEquals(x, y)) return true;
+                if (ReferenceEquals(x, null)) return false;
+                if (ReferenceEquals(y, null)) return false;
+                if (x.GetType() != y.GetType()) return false;
+                if (x.Name != y.Name) return false;
+                if (x is FilesGroup filesGroupX && y is FilesGroup filesGroupY)
+                {
+                    return Equals(filesGroupX.LastTime, filesGroupY.LastTime);
+                }
+                if (x is Folder folderX && y is Folder folderY)
+                {
+                    // return (folderX.Children.Count > 0) == (folderY.Children.Count > 0);
+                    return true;
+                }
+                throw new NotImplementedException(); // if inheritance structure was modified
+            }
+
+            public int GetHashCode(BookmarkHierarchyElement obj)
+            {
+                if (obj is FilesGroup filesGroup)
+                {
+                    unchecked
+                    {
+                        return (filesGroup.Name.GetHashCode() * 397) ^ filesGroup.LastTime.GetHashCode();
+                    }
+                }
+                if (obj is Folder)
+                {
+                    return obj.Name.GetHashCode();
+                }
+                throw new NotImplementedException(); // if inheritance structure was modified
+            }
         }
     }
 }

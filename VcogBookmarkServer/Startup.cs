@@ -23,7 +23,7 @@ namespace VcogBookmarkServer
             // services.AddDirectoryBrowser();
             // services.AddGrpc();
             services.AddTransient<IStorageService>(provider => new StorageService(provider.GetRequiredService<IWebHostEnvironment>().WebRootPath));
-            services.AddSingleton<BookmarkHierarchyService>();
+            services.AddSingleton<BookmarkHierarchyUtils>();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
