@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
@@ -52,8 +53,26 @@ namespace VcogBookmark.Shared.Services
         }
 
         public abstract Task<bool> DeleteBookmark(FilesGroup filesGroup);
-        public abstract Task<bool> DeleteDirectoryWithContentWithin(Folder folder);
+        public abstract Task<bool> DeleteDirectory(Folder folder, bool withContentWithin);
         public abstract Task<Folder> GetHierarchy();
         public abstract Task<bool> Clear(Folder folder);
+        public abstract Task<bool> Move(BookmarkHierarchyElement element, string newPath);
+        public FakeFilesGroup MakeFake(string path)
+        {
+            var pathFragments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
+            var parentHierarchy = MakeFakeFolder(pathFragments.Take(pathFragments.Length - 1));
+            return new FakeFilesGroup(pathFragments.Last()) {Parent = parentHierarchy};
+        }
+
+        [SuppressMessage("ReSharper", "PossibleMultipleEnumeration")]
+        private Folder MakeFakeFolder(IEnumerable<string> pathFragments)
+        {
+            if (!pathFragments.Any()) return new Folder(string.Empty);
+            var fragmentsLeft = pathFragments.Take(pathFragments.Count() - 1);
+            var supFolder = MakeFakeFolder(fragmentsLeft);
+            var folder = new Folder(pathFragments.Last()) {Parent = supFolder};
+            return folder;
+        }
     }
 }

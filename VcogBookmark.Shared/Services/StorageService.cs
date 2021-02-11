@@ -15,7 +15,6 @@ namespace VcogBookmark.Shared.Services
         {
             _storageRootDirectory = storageRootDirectory;
         }
-
         
         public override Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode)
         {
@@ -25,7 +24,7 @@ namespace VcogBookmark.Shared.Services
         }
         private async Task<bool> SaveFile(FileProfile fileProfile, FileWriteMode writeMode)
         {
-            var fileInputStream = await fileProfile.GetData();
+            using var fileInputStream = await fileProfile.GetData();
             var pathToSave = GetFullPath(fileProfile);
             if (writeMode == FileWriteMode.CreateNew && File.Exists(pathToSave))
             {
@@ -62,16 +61,23 @@ namespace VcogBookmark.Shared.Services
 
         public override Task<bool> DeleteBookmark(FilesGroup filesGroup)
         {
-            foreach (var fileProfile in filesGroup.RelatedFiles)
+            try
             {
-                var fullPath = GetFullPath(fileProfile);
-                var fileInfo = new FileInfo(fullPath);
-                fileInfo.Attributes = FileAttributes.Normal;
-                fileInfo.Delete();
-                // RecursiveDeleteEmptyDirectories(fileInfo.Directory);
+                foreach (var fileProfile in filesGroup.RelatedFiles)
+                {
+                    var fullPath = GetFullPath(fileProfile);
+                    var fileInfo = new FileInfo(fullPath);
+                    fileInfo.Attributes = FileAttributes.Normal;
+                    fileInfo.Delete();
+                    // RecursiveDeleteEmptyDirectories(fileInfo.Directory);
+                }
+                // EnsureRootDirectoryExists();
+                return Task.FromResult(true);
             }
-            // EnsureRootDirectoryExists();
-            return Task.FromResult(true);
+            catch
+            {
+                return Task.FromResult(false);
+            }
         }
         
         private void RecursiveDeleteEmptyDirectories(Folder? folder)
@@ -84,10 +90,19 @@ namespace VcogBookmark.Shared.Services
             RecursiveDeleteEmptyDirectories(folder.Parent);
         }
 
-        public override Task<bool> DeleteDirectoryWithContentWithin(Folder folder)
+        public override Task<bool> DeleteDirectory(Folder folder, bool withContentWithin)
         {
-            Directory.Delete(GetFullPath(folder), true);
-            return Task.FromResult(true);
+            try
+            {
+                var directoryInfo = new DirectoryInfo(GetFullPath(folder));
+                directoryInfo.Attributes = FileAttributes.Normal;
+                directoryInfo.Delete(withContentWithin);
+                return Task.FromResult(true);
+            }
+            catch
+            {
+                return Task.FromResult(false);
+            }
         }
 
         public override Task<Folder> GetHierarchy()
@@ -140,17 +155,68 @@ namespace VcogBookmark.Shared.Services
                 .OfType<FilesGroup>()
                 .SelectMany(group => group.RelatedFiles)
                 .Select(GetFullPath);
-            var presentFiles = Directory.EnumerateFiles(GetFullPath(folder));
+            var presentFiles = Directory.EnumerateFiles(GetFullPath(thisFolder));
             var exceptedFiles = presentFiles.Except(registeredFiles);
             
             foreach (var exceptedFile in exceptedFiles)
             {
-                var fileInfo = new FileInfo(exceptedFile);
-                fileInfo.Attributes = FileAttributes.Normal;
-                fileInfo.Delete();
+                try
+                {
+                    var fileInfo = new FileInfo(exceptedFile);
+                    fileInfo.Attributes = FileAttributes.Normal;
+                    fileInfo.Delete();
+                }
+                catch
+                {
+                    return false;
+                }
             }
 
             return await folder.Children.OfType<Folder>().Select(Clear).GatherResults();
+        }
+
+        public override async Task<bool> Move(BookmarkHierarchyElement element, string newPath)
+        {
+            if (element is FakeFilesGroup)
+            {
+                throw new Exception("can't move thing that doesn't exist!");
+            }
+            if (element is FilesGroup filesGroup)
+            {
+                if (await Find(newPath) != null)
+                {
+                    return false;
+                }
+                var fake = MakeFake(newPath);
+                var newFilesGroup = new EmptyFilesGroup(fake, filesGroup);
+                var saveSuccessful = await Save(newFilesGroup, FileWriteMode.CreateNew);
+                if (!saveSuccessful)
+                {
+                    return false;
+                }
+                return await DeleteBookmark(filesGroup);
+            }
+            if (element is Folder folder)
+            {
+                if (await FindFolder(newPath) != null)
+                {
+                    return false; // it exists
+                }
+                var oldFolderFullPath = GetFullPath(folder);
+                var newFolderFullPath = GetFullPath(newPath);
+                var directoryInfo = new DirectoryInfo(oldFolderFullPath);
+                try
+                {
+                    directoryInfo.Attributes = FileAttributes.Normal;
+                    directoryInfo.MoveTo(newFolderFullPath);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            throw new NotImplementedException("derived type isn't recognized!");
         }
 
         public Task<Stream> GetData(FileProfile fileProfile)
@@ -170,6 +236,10 @@ namespace VcogBookmark.Shared.Services
         private string GetFullPath(string partialPath)
         {
             partialPath = partialPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            if (partialPath.Length > 0 && partialPath[0] == '\\')
+            {
+                partialPath = partialPath.Substring(1);
+            }
             return Path.Combine(_storageRootDirectory, partialPath);
         }
         private string GetFullPath(string root, string partialPath)

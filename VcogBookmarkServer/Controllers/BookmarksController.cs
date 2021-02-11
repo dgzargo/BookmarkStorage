@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,7 +9,6 @@ using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
-using VcogBookmarkServer.Services;
 
 namespace VcogBookmarkServer.Controllers
 {
@@ -25,39 +25,37 @@ namespace VcogBookmarkServer.Controllers
         }
         
         [HttpPost(Endpoints.CreateEndpoint)]
-        public Task<IActionResult> InsertBookmark(IFormFileCollection formFileCollection, [FromForm]string bookmarkPath, [FromServices] GroupFilesDataService dataService)
+        public Task<IActionResult> InsertBookmark([FromForm]string bookmarkPath)
         {
-            return StoreBookmark(formFileCollection, bookmarkPath, DateTime.UtcNow, dataService, FileWriteMode.CreateNew);
+            return StoreBookmark(Request.Form.Files, bookmarkPath, DateTime.UtcNow, FileWriteMode.CreateNew);
         }
 
         [HttpPost(Endpoints.UpdateEndpoint)]
-        public Task<IActionResult> UpdateBookmark(IFormFileCollection formFileCollection, [FromForm] string bookmarkPath, [FromServices] GroupFilesDataService dataService)
+        public Task<IActionResult> UpdateBookmark([FromForm]string bookmarkPath)
         {
-            return StoreBookmark(formFileCollection, bookmarkPath, DateTime.UtcNow, dataService, FileWriteMode.Override);
+            return StoreBookmark(Request.Form.Files, bookmarkPath, DateTime.UtcNow, FileWriteMode.Override);
         }
 
         private async Task<IActionResult> StoreBookmark(IFormFileCollection formFileCollection, string bookmarkPath, DateTime lastWriteDate,
-            GroupFilesDataService dataService, FileWriteMode writeMode)
+            FileWriteMode writeMode)
         {
-            bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            FormatPath(ref bookmarkPath);
             lastWriteDate = new DateTime(lastWriteDate.Year, lastWriteDate.Month, lastWriteDate.Day, lastWriteDate.Hour, lastWriteDate.Minute, lastWriteDate.Second, lastWriteDate.Kind); // truncate milliseconds off
-            
+
+            var dataDictionary = new Dictionary<BookmarkFileType, Stream>();
             foreach (var formFile in formFileCollection)
             {
                 var formFileHeader = formFile.Headers["Extension"];
-                dataService.Add(EnumsHelper.ParseType(formFileHeader), formFile.OpenReadStream());
+                dataDictionary.Add(EnumsHelper.ParseType(formFileHeader), formFile.OpenReadStream());
             }
 
             var fileTypes = formFileCollection.Select(formFile => formFile.Headers["Extension"].ToString()).Select(EnumsHelper.ParseType).ToArray();
-            FilesGroup filesGroup;
-            if (fileTypes.Contains(BookmarkFileType.BookmarkBody) && fileTypes.Contains(BookmarkFileType.BookmarkImage))
-            {
-                filesGroup = new Bookmark(bookmarkPath, lastWriteDate) {ProviderService = dataService};
-            }
-            else
+            if (EnumsHelper.RecognizeFilesGroupType(fileTypes) == null)
             {
                 return BadRequest("bookmark type isn't recognized");
             }
+            var fakeFilesGroup = _storageService.MakeFake(bookmarkPath);
+            var filesGroup = new EmptyFilesGroup(fakeFilesGroup, dataDictionary, lastWriteDate);
             var result = await _storageService.Save(filesGroup, writeMode);
             return result ? (IActionResult) Ok() : BadRequest();
         }
@@ -65,7 +63,7 @@ namespace VcogBookmarkServer.Controllers
         [HttpPost(Endpoints.DeleteBookmarkEndpoint)]
         public async Task<IActionResult> DeleteBookmark([FromForm]string bookmarkPath)
         {
-            bookmarkPath = bookmarkPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            FormatPath(ref bookmarkPath);
             var filesGroup = await _storageService.Find(bookmarkPath);
             if (filesGroup == null) return BadRequest();
             var deletionResult = await _storageService.DeleteBookmark(filesGroup);
@@ -73,12 +71,12 @@ namespace VcogBookmarkServer.Controllers
         }
 
         [HttpPost(Endpoints.DeleteBookmarkFolderEndpoint)]
-        public async Task<IActionResult> DeleteDirectory([FromForm]string directoryPath)
+        public async Task<IActionResult> DeleteDirectory([FromForm]string directoryPath, [FromForm]bool withContentWithin)
         {
-            directoryPath = directoryPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            FormatPath(ref directoryPath);
             var folder = await _storageService.FindFolder(directoryPath);
             if (folder == null) return BadRequest();
-            var deletionResult = await _storageService.DeleteDirectoryWithContentWithin(folder);
+            var deletionResult = await _storageService.DeleteDirectory(folder, withContentWithin);
             return deletionResult ? (IActionResult) Ok() : BadRequest();
         }
 
@@ -89,11 +87,36 @@ namespace VcogBookmarkServer.Controllers
             if (foundFolder == null) return BadRequest();
             return _hierarchyUtils.ToAlignedJson(foundFolder);
         }
-        
-        private string GetPureFileExtension(string fileName)
+
+        [HttpPost(Endpoints.ClearEndpoint)]
+        public async Task<IActionResult> Clear([FromForm]string directoryPath)
         {
-            var dotIndex = fileName.LastIndexOf('.') + 1;
-            return fileName.Substring(dotIndex, fileName.Length - dotIndex);
+            FormatPath(ref directoryPath);
+            var folder = await _storageService.FindFolder(directoryPath);
+            if (folder == null) return BadRequest();
+            var clearResult = await _storageService.Clear(folder);
+            return clearResult ? (IActionResult) Ok() : BadRequest();
+        }
+
+        [HttpPost(Endpoints.MoveEndpoint)]
+        public async Task<IActionResult> Move([FromForm]string originalPath, [FromForm]string newPath, [FromForm]bool isFolder)
+        {
+            FormatPath(ref originalPath);
+            FormatPath(ref newPath);
+            var element = isFolder
+                ? (BookmarkHierarchyElement?) await _storageService.FindFolder(originalPath)
+                : await _storageService.Find(originalPath);
+            if (element == null)
+            {
+                return BadRequest();
+            }
+            var moveResult = await _storageService.Move(element, newPath);
+            return moveResult ? (IActionResult) Ok() : BadRequest();
+        }
+
+        private void FormatPath(ref string path)
+        {
+            path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         }
     }
 }

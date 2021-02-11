@@ -1,5 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Models;
 
 namespace VcogBookmark.Shared
 {
@@ -25,9 +29,15 @@ namespace VcogBookmark.Shared
             };
         }
 
-        public static TEnum[] AllEnumValues<TEnum>() where TEnum: Enum
+        [SuppressMessage("ReSharper", "PossibleMultipleEnumeration")]
+        public static Type? RecognizeFilesGroupType(IEnumerable<BookmarkFileType> presentFileTypes)
         {
-            return (TEnum[]) Enum.GetValues(typeof(TEnum));
+            if (presentFileTypes.Contains(BookmarkFileType.BookmarkBody) || presentFileTypes.Contains(BookmarkFileType.BookmarkImage))
+            {
+                return typeof(Bookmark);
+            }
+
+            return null;
         }
     }
 }

@@ -19,8 +19,11 @@ namespace VcogBookmark.Shared.Services
         {
             _baseUri = new Uri(baseAddress);
             _bookmarkHierarchyUtils = bookmarkHierarchyUtils;
-            _hierarchyRoot = hierarchyRoot ?? string.Empty;
-            if (_hierarchyRoot.Any(c => c == '\\')) throw new ArgumentException();
+            _hierarchyRoot = hierarchyRoot ?? "/";
+            if (_hierarchyRoot.FirstOrDefault() != '/' || _hierarchyRoot.Any(c => c == '\\'))
+            {
+                throw new ArgumentException($"wrong format of {nameof(hierarchyRoot)}");
+            }
         }
 
         public override async Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode)
@@ -44,12 +47,13 @@ namespace VcogBookmark.Shared.Services
             
             foreach (var streamContent in streamData)
             {
-                multipartFormDataContent.Add(streamContent);
+                var ext = streamContent.Headers.First(kvp => kvp.Key == "Extension").Value.First()!;
+                multipartFormDataContent.Add(streamContent, EnumsHelper.ParseType(ext).ToString(), $"{filesGroup.Name}.{ext}");
             }
             multipartFormDataContent.Add(stringContent, "bookmarkPath");
             
             using var httpClient = new HttpClient{BaseAddress = _baseUri};
-            var responseMessage = await httpClient.PostAsync(endpointPath, multipartFormDataContent);
+            using var responseMessage = await httpClient.PostAsync(endpointPath, multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
         }
 
@@ -78,20 +82,23 @@ namespace VcogBookmark.Shared.Services
             return responseMessage.IsSuccessStatusCode;
         }
 
-        public override async Task<bool> DeleteDirectoryWithContentWithin(Folder folder)
+        public override async Task<bool> DeleteDirectory(Folder folder, bool withContentWithin)
         {
             const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.DeleteBookmarkFolderEndpoint;
 
             var fullBookmarkPath = GetFullPath(folder);
-            var stringContent = new StringContent(fullBookmarkPath);
+            var pathContent = new StringContent(fullBookmarkPath);
+            
+            var withContentWithinContent = new StringContent(withContentWithin.ToString());
 
             var multipartFormDataContent = new MultipartFormDataContent
             {
-                {stringContent, "bookmarkPath"}
+                {pathContent, "directoryPath"},
+                {withContentWithinContent, "withContentWithin"}
             };
 
             using var client = new HttpClient {BaseAddress = _baseUri};
-            var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
+            using var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
         }
 
@@ -109,9 +116,43 @@ namespace VcogBookmark.Shared.Services
 
         public override async Task<bool> Clear(Folder folder)
         {
+            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.ClearEndpoint;
+            
             var fullPath = GetFullPath(folder);
+            var pathContent = new StringContent(fullPath);
+
+            var multipartFormDataContent = new MultipartFormDataContent
+            {
+                {pathContent, "directoryPath"},
+            };
+            
             using var client = new HttpClient {BaseAddress = _baseUri};
-            var responseMessage = await client.PostAsync(fullPath, null);
+            var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
+            return responseMessage.IsSuccessStatusCode;
+        }
+
+        public override async Task<bool> Move(BookmarkHierarchyElement element, string newPath)
+        {
+            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.MoveEndpoint;
+            
+            var originalFullPath = GetFullPath(element);
+            var originalPathContent = new StringContent(originalFullPath);
+            
+            var newFullPath = GetFullPath(newPath);
+            var newPathContent = new StringContent(newFullPath);
+
+            var isFolder = element is Folder;
+            var isFolderContent = new StringContent(isFolder.ToString());
+
+            var multipartFormDataContent = new MultipartFormDataContent
+            {
+                {originalPathContent, "originalPath"},
+                {newPathContent, "newPath"},
+                {isFolderContent, "isFolder"},
+            };
+            
+            using var client = new HttpClient {BaseAddress = _baseUri};
+            var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent);
             return responseMessage.IsSuccessStatusCode;
         }
 
@@ -137,7 +178,17 @@ namespace VcogBookmark.Shared.Services
 
         private string GetFullPath(BookmarkHierarchyElement hierarchyElement)
         {
-            return Path.Combine(_hierarchyRoot, hierarchyElement.LocalPath).Replace('\\', '/');
+            var partialPath = hierarchyElement.LocalPath;
+            if (partialPath.Length > 0 && partialPath[0] == '\\')
+            {
+                partialPath = partialPath.Substring(1);
+            }
+            return Path.Combine(_hierarchyRoot, partialPath).Replace('\\', '/');
+        }
+        
+        private string GetFullPath(string partialPath)
+        {
+            return Path.Combine(_hierarchyRoot, partialPath).Replace('\\', '/');
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Services;
@@ -43,14 +44,14 @@ namespace VcogBookmark.Shared.Models
         }
     }
 
-    public abstract class FilesGroup: BookmarkHierarchyElement
+    public abstract class FilesGroup : BookmarkHierarchyElement
     {
         protected FilesGroup(string bookmarkName, DateTime lastTime) : base(bookmarkName)
         {
             LastTime = lastTime;
         }
         public DateTime LastTime { get; }
-        protected abstract IEnumerable<BookmarkFileType> FileTypes { get; }
+        public abstract IEnumerable<BookmarkFileType> FileTypes { get; }
         public IEnumerable<FileProfile> RelatedFiles => FileTypes.Select(type => new FileProfile(LocalPath, type, LastTime, ProviderServiceInherited));
     }
 
@@ -61,6 +62,32 @@ namespace VcogBookmark.Shared.Models
             FileTypes = new[] {BookmarkFileType.BookmarkBody, BookmarkFileType.BookmarkImage};
         }
 
-        protected override IEnumerable<BookmarkFileType> FileTypes { get; }
+        public override IEnumerable<BookmarkFileType> FileTypes { get; }
+    }
+
+    public class FakeFilesGroup : BookmarkHierarchyElement
+    {
+        public FakeFilesGroup(string bookmarkName) : base(bookmarkName)
+        {
+        }
+    }
+
+    public class EmptyFilesGroup : FilesGroup
+    {
+        public EmptyFilesGroup(FakeFilesGroup fake, FilesGroup filesGroup) : base(fake.Name, filesGroup.LastTime)
+        {
+            Parent = fake.Parent;
+            FileTypes = filesGroup.FileTypes;
+            ProviderService = new FromFileGroupProviderService(filesGroup);
+        }
+        
+        public EmptyFilesGroup(FakeFilesGroup fake, Dictionary<BookmarkFileType, Stream> dataDictionary, DateTime lastTime) : base(fake.Name, lastTime)
+        {
+            Parent = fake.Parent;
+            FileTypes = dataDictionary.Keys;
+            ProviderService = new FromStreamProviderService(dataDictionary);
+        }
+
+        public override IEnumerable<BookmarkFileType> FileTypes { get; }
     }
 }

@@ -9,5 +9,6 @@
         public const string DeleteBookmarkFolderEndpoint = "delete-directory";
         public const string GetHierarchyEndpoint = "hierarchy";
         public const string ClearEndpoint = "clear";
+        public const string MoveEndpoint = "move";
     }
 }
