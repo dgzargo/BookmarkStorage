@@ -17,16 +17,6 @@ namespace VcogBookmark.Shared.Models
         public Folder? Parent { get; set; }
         public string Name { get; set; }
         public string LocalPath => Parent is null ? Name : $"{Parent.LocalPath}/{Name}";
-        public IFileDataProviderService? ProviderService { get; set; }
-        public IFileDataProviderService ProviderServiceInherited
-        {
-            get
-            {
-                if (ProviderService != null) return ProviderService;
-                if (Parent == null) throw new Exception($"inherited {nameof(IFileDataProviderService)} doesn't exist");
-                return Parent.ProviderServiceInherited;
-            }
-        }
     }
 
     public class Folder: BookmarkHierarchyElement
@@ -46,18 +36,20 @@ namespace VcogBookmark.Shared.Models
 
     public abstract class FilesGroup : BookmarkHierarchyElement
     {
-        protected FilesGroup(string bookmarkName, DateTime lastTime) : base(bookmarkName)
+        protected FilesGroup(string bookmarkName, DateTime lastTime, IFileDataProviderService providerService) : base(bookmarkName)
         {
             LastTime = lastTime;
+            ProviderService = providerService;
         }
         public DateTime LastTime { get; }
         public abstract IEnumerable<BookmarkFileType> FileTypes { get; }
-        public IEnumerable<FileProfile> RelatedFiles => FileTypes.Select(type => new FileProfile(LocalPath, type, LastTime, ProviderServiceInherited));
+        public IEnumerable<FileProfile> RelatedFiles => FileTypes.Select(type => new FileProfile(LocalPath, type, LastTime, ProviderService));
+        public IFileDataProviderService ProviderService { get; }
     }
 
     public class Bookmark : FilesGroup
     {
-        public Bookmark(string bookmarkName, DateTime lastTime) : base(bookmarkName, lastTime)
+        public Bookmark(string bookmarkName, DateTime lastTime, IFileDataProviderService providerService) : base(bookmarkName, lastTime, providerService)
         {
             FileTypes = new[] {BookmarkFileType.BookmarkBody, BookmarkFileType.BookmarkImage};
         }
@@ -72,20 +64,18 @@ namespace VcogBookmark.Shared.Models
         }
     }
 
-    public class EmptyFilesGroup : FilesGroup
+    public class ProxyFilesGroup : FilesGroup
     {
-        public EmptyFilesGroup(FakeFilesGroup fake, FilesGroup filesGroup) : base(fake.Name, filesGroup.LastTime)
+        public ProxyFilesGroup(FakeFilesGroup fake, FilesGroup filesGroup) : base(fake.Name, filesGroup.LastTime, new FromFileGroupProviderService(filesGroup))
         {
             Parent = fake.Parent;
             FileTypes = filesGroup.FileTypes;
-            ProviderService = new FromFileGroupProviderService(filesGroup);
         }
         
-        public EmptyFilesGroup(FakeFilesGroup fake, Dictionary<BookmarkFileType, Stream> dataDictionary, DateTime lastTime) : base(fake.Name, lastTime)
+        public ProxyFilesGroup(FakeFilesGroup fake, Dictionary<BookmarkFileType, Stream> dataDictionary, DateTime lastTime) : base(fake.Name, lastTime, new FromStreamProviderService(dataDictionary))
         {
             Parent = fake.Parent;
             FileTypes = dataDictionary.Keys;
-            ProviderService = new FromStreamProviderService(dataDictionary);
         }
 
         public override IEnumerable<BookmarkFileType> FileTypes { get; }

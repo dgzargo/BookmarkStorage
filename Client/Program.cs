@@ -32,7 +32,7 @@ namespace Client
             
             /*var fake = storageService.MakeFake(@"/ex2");
             var originBookmark = await storageService.Find(@"/ex") ?? throw new InvalidOperationException();
-            var result = await storageService.Save(new EmptyFilesGroup(fake, originBookmark), FileWriteMode.CreateNew);//*/
+            var result = await storageService.Save(new ProxyFilesGroup(fake, originBookmark), FileWriteMode.CreateNew);//*/
             
             /*var originBookmark = await storageService.Find(@"/ex2") ?? throw new InvalidOperationException();
             var result = await storageService.Move(originBookmark, @"/ex3");//*/

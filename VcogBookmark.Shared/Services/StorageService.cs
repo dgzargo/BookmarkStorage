@@ -117,7 +117,7 @@ namespace VcogBookmark.Shared.Services
             var directoryNames = Directory.GetDirectories(fullPath);
             var fileNames = Directory.GetFiles(fullPath);
 
-            var folder = new Folder(null) {ProviderService = this};
+            var folder = new Folder(null);
 
             foreach (var filePath in fileNames)
             {
@@ -126,10 +126,9 @@ namespace VcogBookmark.Shared.Services
                     var lastWriteTime = File.GetLastWriteTimeUtc(filePath);
                     var lastWriteTimeTrimmed = new DateTime(lastWriteTime.Year, lastWriteTime.Month, lastWriteTime.Day, lastWriteTime.Hour, lastWriteTime.Minute, lastWriteTime.Second, lastWriteTime.Kind);
                     var pureFilename = Path.GetFileNameWithoutExtension(filePath);
-                    var bookmark = new Bookmark(pureFilename, lastWriteTimeTrimmed)
+                    var bookmark = new Bookmark(pureFilename, lastWriteTimeTrimmed, this)
                     {
                         Parent = folder,
-                        ProviderService = this,
                     };
                     folder.Children.Add(bookmark);
                 }
@@ -188,7 +187,7 @@ namespace VcogBookmark.Shared.Services
                     return false;
                 }
                 var fake = MakeFake(newPath);
-                var newFilesGroup = new EmptyFilesGroup(fake, filesGroup);
+                var newFilesGroup = new ProxyFilesGroup(fake, filesGroup);
                 var saveSuccessful = await Save(newFilesGroup, FileWriteMode.CreateNew);
                 if (!saveSuccessful)
                 {

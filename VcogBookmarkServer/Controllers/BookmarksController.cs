@@ -55,7 +55,7 @@ namespace VcogBookmarkServer.Controllers
                 return BadRequest("bookmark type isn't recognized");
             }
             var fakeFilesGroup = _storageService.MakeFake(bookmarkPath);
-            var filesGroup = new EmptyFilesGroup(fakeFilesGroup, dataDictionary, lastWriteDate);
+            var filesGroup = new ProxyFilesGroup(fakeFilesGroup, dataDictionary, lastWriteDate);
             var result = await _storageService.Save(filesGroup, writeMode);
             return result ? (IActionResult) Ok() : BadRequest();
         }

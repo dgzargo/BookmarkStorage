@@ -109,8 +109,7 @@ namespace VcogBookmark.Shared.Services
             var responseMessage = await client.GetAsync($"{requestPartialAddress}?root={_hierarchyRoot}");
             responseMessage.EnsureSuccessStatusCode();
             var response = await responseMessage.Content.ReadAsStringAsync();
-            var hierarchy = _bookmarkHierarchyUtils.Parse(response);
-            hierarchy.ProviderService = this;
+            var hierarchy = _bookmarkHierarchyUtils.Parse(response, this);
             return hierarchy;
         }
 

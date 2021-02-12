@@ -42,13 +42,13 @@ namespace VcogBookmark.Shared.Services
             throw new ArgumentOutOfRangeException(nameof(hierarchy));
         }
 
-        public Folder Parse(string jsonString)
+        public Folder Parse(string jsonString, IFileDataProviderService providerService)
         {
             var jsonArray = JArray.Parse(jsonString);
-            return Parse(jsonArray);
+            return Parse(jsonArray, providerService);
         }
 
-        private Folder Parse(JArray jsonArray)
+        private Folder Parse(JArray jsonArray, IFileDataProviderService providerService)
         {
             var folder = new Folder(null);
             
@@ -58,7 +58,7 @@ namespace VcogBookmark.Shared.Services
                 {
                     var bookmarkData = jToken.ToString().Split('@');
                     if (bookmarkData.Length != 2) throw new FormatException("wrong bookmark format!");
-                    var bookmark = new Bookmark(bookmarkData[0], DateTime.Parse(bookmarkData[1]).ToUniversalTime());
+                    var bookmark = new Bookmark(bookmarkData[0], DateTime.Parse(bookmarkData[1]).ToUniversalTime(), providerService);
                     bookmark.Parent = folder;
                     folder.Children.Add(bookmark);
                 }
@@ -68,7 +68,7 @@ namespace VcogBookmark.Shared.Services
                     var firstProperty = jObject.Properties().First();
                     var folderName = firstProperty.Name;
                     var innerJsonArray = (JArray) firstProperty.Value;
-                    var innerBookmarkFolder = Parse(innerJsonArray);
+                    var innerBookmarkFolder = Parse(innerJsonArray, providerService);
                     innerBookmarkFolder.Name = folderName;
                     innerBookmarkFolder.Parent = folder;
                     folder.Children.Add(innerBookmarkFolder);
