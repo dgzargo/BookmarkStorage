@@ -10,17 +10,17 @@ namespace VcogBookmark.Shared.Services
 {
     public class BookmarkHierarchyUtils
     {
-        public string ToJson(BookmarkHierarchyElement hierarchy)
+        public static readonly BookmarkHierarchyUtils Instance = new BookmarkHierarchyUtils();
+        public string ToJson(BookmarkHierarchyElement hierarchy, bool serializeAsRoot)
         {
             if (hierarchy is FilesGroup bookmarkHierarchyBookmark)
             {
                 return $"\"{bookmarkHierarchyBookmark.Name}@{bookmarkHierarchyBookmark.LastTime:o}\"";
-                //return $"\"{bookmarkHierarchyBookmark.BookmarkName}\"";
             }
             if (hierarchy is Folder bookmarkHierarchyFolder)
             {
-                var listOfSerializedChildren = string.Join(",", bookmarkHierarchyFolder.Children.Select(ToJson));
-                return string.IsNullOrWhiteSpace(bookmarkHierarchyFolder.Name)
+                var listOfSerializedChildren = string.Join(",", bookmarkHierarchyFolder.Children.Select(folder => ToJson(folder, false)));
+                return serializeAsRoot
                     ? $"[{listOfSerializedChildren}]"
                     : $"{{\"{bookmarkHierarchyFolder.Name}\":[{listOfSerializedChildren}]}}";
             }
@@ -32,11 +32,11 @@ namespace VcogBookmark.Shared.Services
         {
             if (hierarchy is FilesGroup)
             {
-                return ToJson(hierarchy); // no aligning for one bookmark
+                return ToJson(hierarchy, true); // no aligning for one bookmark
             }
             if (hierarchy is Folder)
             {
-                var jsonString = ToJson(hierarchy);
+                var jsonString = ToJson(hierarchy, true);
                 return JArray.Parse(jsonString).ToString(Formatting.Indented);
             }
             throw new ArgumentOutOfRangeException(nameof(hierarchy));

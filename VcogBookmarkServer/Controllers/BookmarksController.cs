@@ -84,7 +84,7 @@ namespace VcogBookmarkServer.Controllers
         public async Task<ActionResult<string>> Hierarchy([FromQuery]string? root)
         {
             var foundFolder = await _storageService.FindFolder(root ?? string.Empty);
-            if (foundFolder == null) return BadRequest();
+            if (foundFolder == null) return NotFound();
             return _hierarchyUtils.ToAlignedJson(foundFolder);
         }
 

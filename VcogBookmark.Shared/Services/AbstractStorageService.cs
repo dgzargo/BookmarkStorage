@@ -13,7 +13,7 @@ namespace VcogBookmark.Shared.Services
     {
         public abstract Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode);
 
-        public FilesGroup? Find(Folder folderToSearch, string path)
+        protected FilesGroup? Find(Folder folderToSearch, string path)
         {
             var pathFragments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                 .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
@@ -24,7 +24,8 @@ namespace VcogBookmark.Shared.Services
 
         public async Task<FilesGroup?> Find(string path)
         {
-            return Find(await GetHierarchy(), path);
+            var folder = await GetHierarchy();
+            return folder != null ? Find(folder, path) : null;
         }
 
         [SuppressMessage("ReSharper", "PossibleMultipleEnumeration")]
@@ -40,7 +41,7 @@ namespace VcogBookmark.Shared.Services
         }
 
         
-        public Folder? FindFolder(Folder folderToSearch, string path)
+        protected Folder? FindFolder(Folder folderToSearch, string path)
         {
             var pathFragments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                 .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
@@ -49,12 +50,13 @@ namespace VcogBookmark.Shared.Services
 
         public async Task<Folder?> FindFolder(string path)
         {
-            return FindFolder(await GetHierarchy(), path);
+            var folder = await GetHierarchy();
+            return folder != null ? FindFolder(folder, path) : null;
         }
 
         public abstract Task<bool> DeleteBookmark(FilesGroup filesGroup);
         public abstract Task<bool> DeleteDirectory(Folder folder, bool withContentWithin);
-        public abstract Task<Folder> GetHierarchy();
+        public abstract Task<Folder?> GetHierarchy();
         public abstract Task<bool> Clear(Folder folder);
         public abstract Task<bool> Move(BookmarkHierarchyElement element, string newPath);
         public FakeFilesGroup MakeFake(string path)

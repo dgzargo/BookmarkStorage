@@ -19,13 +19,8 @@ namespace VcogBookmark.Shared
 
         public static async Task<bool> GatherResults(this IEnumerable<Task<bool>> source)
         {
-            var results = await Task.WhenAll(source);
-            return results.GatherResults();
-        }
-
-        public static bool GatherResults(this IEnumerable<bool> source)
-        {
-            return source.All(result => result);
+            var results = await Task.WhenAll(source).ConfigureAwait(false);
+            return results.All(result => result);
         }
     }
 }

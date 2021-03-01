@@ -13,7 +13,7 @@ namespace VcogBookmark.Shared.Services
         Task<Folder?> FindFolder(string path);
         Task<bool> DeleteBookmark(FilesGroup filesGroup);
         Task<bool> DeleteDirectory(Folder folder, bool withContentWithin);
-        Task<Folder> GetHierarchy();
+        Task<Folder?> GetHierarchy();
         Task<bool> Clear(Folder folder);
         Task<bool> Move(BookmarkHierarchyElement element, string newPath);
         FakeFilesGroup MakeFake(string path);

@@ -24,7 +24,7 @@ namespace VcogBookmark.Shared.Services
         }
         private async Task<bool> SaveFile(FileProfile fileProfile, FileWriteMode writeMode)
         {
-            using var fileInputStream = await fileProfile.GetData();
+            using var fileInputStream = await fileProfile.GetData().ConfigureAwait(false);
             var pathToSave = GetFullPath(fileProfile);
             if (writeMode == FileWriteMode.CreateNew && File.Exists(pathToSave))
             {
@@ -38,7 +38,6 @@ namespace VcogBookmark.Shared.Services
             {
                 FileWriteMode.Override => FileMode.Create,
                 FileWriteMode.CreateNew => FileMode.CreateNew,
-                FileWriteMode.NotStrict => FileMode.Create,
                 _ => throw new ArgumentOutOfRangeException(nameof(writeMode), writeMode, null)
             };
             try
@@ -46,7 +45,7 @@ namespace VcogBookmark.Shared.Services
                 Directory.CreateDirectory(Path.GetDirectoryName(pathToSave)!);
                 using (var outputStream = new FileStream(pathToSave, fileMode))
                 {
-                    await fileInputStream.CopyToAsync(outputStream);
+                    await fileInputStream.CopyToAsync(outputStream).ConfigureAwait(false);
                 }
 
                 File.SetCreationTimeUtc(pathToSave, fileProfile.LastTimeUtc);
@@ -105,11 +104,9 @@ namespace VcogBookmark.Shared.Services
             }
         }
 
-        public override Task<Folder> GetHierarchy()
+        public override Task<Folder?> GetHierarchy()
         {
-            return Directory.Exists(_storageRootDirectory)
-                ? Task.FromResult(GetHierarchy(_storageRootDirectory))
-                : throw new Exception("root directory does not exist!");
+            return Task.FromResult(Directory.Exists(_storageRootDirectory) ? GetHierarchy(_storageRootDirectory) : null);
         }
 
         private Folder GetHierarchy(string fullPath) // the folder must exist
@@ -137,7 +134,7 @@ namespace VcogBookmark.Shared.Services
             foreach (var subDirectoryPath in directoryNames)
             {
                 var subDir = GetHierarchy(subDirectoryPath);
-                subDir.Name = Path.GetFileName(subDirectoryPath) ?? string.Empty;
+                subDir.Name = Path.GetFileName(subDirectoryPath);
                 subDir.Parent = folder;
                 folder.Children.Add(subDir);
             }
@@ -147,7 +144,7 @@ namespace VcogBookmark.Shared.Services
 
         public override async Task<bool> Clear(Folder folder)
         {
-            var thisFolder = await FindFolder(folder.LocalPath);
+            var thisFolder = await FindFolder(folder.LocalPath).ConfigureAwait(false);
             if (thisFolder == null) return true; // it doesn't exist so it's already clean
             
             var registeredFiles = thisFolder.Children
@@ -171,7 +168,7 @@ namespace VcogBookmark.Shared.Services
                 }
             }
 
-            return await folder.Children.OfType<Folder>().Select(Clear).GatherResults();
+            return await folder.Children.OfType<Folder>().Select(Clear).GatherResults().ConfigureAwait(false);
         }
 
         public override async Task<bool> Move(BookmarkHierarchyElement element, string newPath)
@@ -182,22 +179,22 @@ namespace VcogBookmark.Shared.Services
             }
             if (element is FilesGroup filesGroup)
             {
-                if (await Find(newPath) != null)
+                if (await Find(newPath).ConfigureAwait(false) != null)
                 {
                     return false;
                 }
                 var fake = MakeFake(newPath);
                 var newFilesGroup = new ProxyFilesGroup(fake, filesGroup);
-                var saveSuccessful = await Save(newFilesGroup, FileWriteMode.CreateNew);
+                var saveSuccessful = await Save(newFilesGroup, FileWriteMode.CreateNew).ConfigureAwait(false);
                 if (!saveSuccessful)
                 {
                     return false;
                 }
-                return await DeleteBookmark(filesGroup);
+                return await DeleteBookmark(filesGroup).ConfigureAwait(false);
             }
             if (element is Folder folder)
             {
-                if (await FindFolder(newPath) != null)
+                if (await FindFolder(newPath).ConfigureAwait(false) != null)
                 {
                     return false; // it exists
                 }
@@ -235,16 +232,15 @@ namespace VcogBookmark.Shared.Services
         private string GetFullPath(string partialPath)
         {
             partialPath = partialPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            if (partialPath.Length > 0 && partialPath[0] == '\\')
+            if (partialPath.Length > 0)
             {
-                partialPath = partialPath.Substring(1);
+                var firstChar = partialPath[0];
+                if (firstChar == '\\' || firstChar == '/')
+                {
+                    partialPath = partialPath.Substring(1);
+                }
             }
             return Path.Combine(_storageRootDirectory, partialPath);
-        }
-        private string GetFullPath(string root, string partialPath)
-        {
-            var localPath = Path.Combine(root, partialPath);
-            return GetFullPath(localPath);
         }
     }
 }

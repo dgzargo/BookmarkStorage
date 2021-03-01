@@ -17,9 +17,9 @@ namespace VcogBookmark.ClientTools.Services
         private readonly IStorageService _targetStorageService;
         private readonly IStorageService _sourceStorageService;
 
-        public BookmarkStateService(BookmarkVersionService versionService, IStorageService targetStorageService, IStorageService sourceStorageService)
+        public BookmarkStateService(IStorageService targetStorageService, IStorageService sourceStorageService, BookmarkVersionService? bookmarkVersionService = null)
         {
-            _versionService = versionService;
+            _versionService = bookmarkVersionService ?? BookmarkVersionService.Instance;
             _targetStorageService = targetStorageService;
             _sourceStorageService = sourceStorageService;
             UpdateDelay = TimeSpan.FromMinutes(15);

@@ -7,24 +7,39 @@ namespace VcogBookmark.ClientTools.Services
 {
     public class BookmarkVersionService
     {
-        private static IEqualityComparer<BookmarkHierarchyElement> _comparer = new BookmarkHierarchyElementEqualityComparer();
-        public Folder ObsoleteBookmarks(Folder serverFolder, Folder clientFolder)
+        public static readonly BookmarkVersionService Instance = new BookmarkVersionService(); // singleton
+        private static readonly IEqualityComparer<BookmarkHierarchyElement> Comparer = new BookmarkHierarchyElementEqualityComparer();
+        public Folder ObsoleteBookmarks(Folder? serverFolder, Folder? clientFolder)
         {
             return ExceptBookmarkHierarchy(clientFolder, serverFolder);
         }
         
-        public Folder NewBookmarks(Folder serverFolder, Folder clientFolder)
+        public Folder NewBookmarks(Folder? serverFolder, Folder? clientFolder)
         {
             return ExceptBookmarkHierarchy(serverFolder, clientFolder);
         }
 
-        private Folder ExceptBookmarkHierarchy(Folder minuendFolder, Folder subtrahendFolder)
+        private Folder ExceptBookmarkHierarchy(Folder? minuendFolder, Folder? subtrahendFolder)
         {
+            #region check input conditions
+
+            if (minuendFolder == null)
+            {
+                return new Folder(string.Empty);
+            }
+
+            if (subtrahendFolder == null)
+            {
+                return minuendFolder;
+            }
+            
             if (minuendFolder.Name != subtrahendFolder.Name) throw new ArgumentException("folder names are different!");
+
+            #endregion
 
             var folder = new Folder(minuendFolder.Name);
             
-            var exceptedHierarchyElements = minuendFolder.Children.Except(subtrahendFolder.Children, _comparer);
+            var exceptedHierarchyElements = minuendFolder.Children.Except(subtrahendFolder.Children, Comparer);
             foreach (var exceptedHierarchyElement in exceptedHierarchyElements)
             {
                 folder.Children.Add(exceptedHierarchyElement);
@@ -52,7 +67,7 @@ namespace VcogBookmark.ClientTools.Services
             {
                 var xFolders = x.Children.OfType<Folder>();
                 var yFolders = y.Children.OfType<Folder>();
-                return xFolders.Intersect(yFolders, _comparer).Select(element => element.Name);
+                return xFolders.Intersect(yFolders, Comparer).Select(element => element.Name);
             }
         }
         
