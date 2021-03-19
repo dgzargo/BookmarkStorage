@@ -1,8 +1,10 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using VcogBookmark.ClientTools.Services;
+using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
@@ -11,48 +13,53 @@ namespace Client
 {
     static class Program
     {
-        private const bool UseLocalServer = true;
-        private const string VisportServerAddress = "http://lv.visco.no:8282/VcogBookmarkServer/";
-        private const string LocalServerAddress = "https://localhost:5001/";
-        private const string ServerAddressToUse = UseLocalServer ? LocalServerAddress : VisportServerAddress;
-        static async Task Main(string[] args)
+        static async Task Main()
         {
-            await Task.Delay(2000);
-            
-            await CreateStorageService<StorageService>().RunTestActions();
-            await CreateStorageService<BookmarkNetworkService>().RunTestActions();
-            await CreateStorageService<BookmarkNetworkService>().TestStorage_MoveBookmark("ex", "subroot/ex"); // prepare root for the next test
-            await CreateStorageService<BookmarkNetworkService>("/subroot").RunTestActions();
-            await CreateStorageService<BookmarkNetworkService>().TestStorage_MoveBookmark("subroot/ex", "ex"); // unprepare
+            await Task.Delay(1000);
+
+            /*await new LocalStorageFactory(Directory.GetCurrentDirectory() + @"\root", TimeSpan.FromSeconds(0.2))
+                .SetupAndRunTests(TimeSpan.FromSeconds(0.6));//*/
+            // await new NetworkStorageFactory("https://localhost:5001/").SetupAndRunTests(TimeSpan.FromSeconds(1));
+            await new NetworkStorageFactory("https://localhost:5001/", "/subfolder/").SetupAndRunTests(TimeSpan.FromSeconds(0.6));
         }
 
-        static IStorageService CreateStorageService<TStorageService>(string? subRoot = null) where TStorageService : IStorageService
+        static async Task SetupAndRunTests(this IStorageFactory storageFactory, TimeSpan? withDelay = null)
         {
-            if (typeof(TStorageService) == typeof(BookmarkNetworkService))
+            using var folderChangeWatcher = storageFactory.CreateChangeWatcher();
+            using var subscription = folderChangeWatcher.FolderChanged.Subscribe(path =>
             {
-                return subRoot == null ? new BookmarkNetworkService(ServerAddressToUse) : new BookmarkNetworkService(ServerAddressToUse, subRoot);
-            }
-            if (typeof(TStorageService) == typeof(StorageService))
-            {
-                var root = Directory.GetCurrentDirectory() ?? throw new Exception();
-                return subRoot == null ? new StorageService(root + @"\root") : new StorageService(root + @"\root" + subRoot);
-            }
-            throw new NotSupportedException("This StorageService type has no support!");
+                Console.ForegroundColor = ConsoleColor.DarkMagenta;
+                Console.WriteLine($"File in folder '{path}' was changed");
+                Console.ForegroundColor = ConsoleColor.Black;
+            });
+            //Task.Run(() => { Thread.Sleep(4000); subscription.Dispose(); Console.WriteLine("subscription cancelled"); });
+            await storageFactory.CreateStorageService().RunTestActions(withDelay);
+            await Task.Delay(1000);
         }
 
-        static async Task RunTestActions(this IStorageService storageService)
+        static async Task RunTestActions(this IStorageService storageService, TimeSpan? withDelay = null)
         {
+            var millisecondsDelay = (int)(withDelay?.TotalMilliseconds ?? 0);
             try
             {
                 await storageService.TestStorage_Clear();
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_Save("ex", "ex2", FileWriteMode.CreateNew);
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_Save("ex", "ex2", FileWriteMode.Override);
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_MoveBookmark("ex2", "test/ex");
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_MoveFolder("test", "test2");
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_DeleteBookmark("test2/ex");
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_DeleteDirectory("test2", false);
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_Save("ex", "test/ex", FileWriteMode.CreateNew);
+                await Task.Delay(millisecondsDelay);
                 await storageService.TestStorage_DeleteDirectory("test", true);
+                await Task.Delay(millisecondsDelay);
             }
             catch (Exception e)
             {
@@ -73,10 +80,16 @@ namespace Client
                 throw new Exception($"{nameof(storageService.Clear)} was not successful!");
             }
 
-            if (hierarchy.Children.Count != 1 || hierarchy.Children.First().GetType() != typeof(Bookmark) || hierarchy.Children.First().Name != "ex")
+            if (hierarchy.Children.OfType<Bookmark>().Count() != 1
+                || hierarchy.Children.OfType<Bookmark>().First().Name != "ex"
+                || hierarchy.Children.OfType<Folder>().Count() > 1
+                || hierarchy.Children.OfType<Folder>().Count() == 1
+                && hierarchy.Children.OfType<Folder>().Single().Name != "subfolder")
             {
                 throw new Exception("Root folder state doesn't match for these test. Fix it manually!");
             }
+            
+            Console.WriteLine("-cleared-----------");
         }
 
         static async Task TestStorage_Save(this IStorageService storageService, string fromBookmarkPath, string toBookmarkPath, FileWriteMode writeMode)
@@ -92,6 +105,8 @@ namespace Client
             {
                 throw new Exception($"{nameof(storageService.Save)} bookmark to \"{toBookmarkPath}\" was not successful!");
             }
+            
+            PrintOutChangedDebugMessage(toBookmarkPath, toBookmarkPath);
         }
 
         static async Task TestStorage_MoveBookmark(this IStorageService storageService, string fromBookmarkPath, string toBookmarkPath)
@@ -106,6 +121,8 @@ namespace Client
             {
                 throw new Exception($"{nameof(storageService.Move)} bookmark to \"{toBookmarkPath}\" was not successful!");
             }
+            
+            PrintOutChangedDebugMessage(fromBookmarkPath, toBookmarkPath);
         }
 
         static async Task TestStorage_MoveFolder(this IStorageService storageService, string fromFolderPath, string toFolderPath)
@@ -120,6 +137,8 @@ namespace Client
             {
                 throw new Exception($"{nameof(storageService.Move)} folder to \"{toFolderPath}\" was not successful!");
             }
+            
+            Console.WriteLine($"-\"/{fromFolderPath}\" and \"/{toFolderPath}\" were changed");
         }
 
         static async Task TestStorage_DeleteBookmark(this IStorageService storageService, string bookmarkToDeletePath)
@@ -134,6 +153,8 @@ namespace Client
             {
                 throw new Exception($"{nameof(storageService.DeleteBookmark)} \"{bookmarkToDeletePath}\" was not successful!");
             }
+            
+            PrintOutChangedDebugMessage(bookmarkToDeletePath, bookmarkToDeletePath);
         }
 
         static async Task TestStorage_DeleteDirectory(this IStorageService storageService, string folderToDeletePath, bool withContentWithin)
@@ -147,6 +168,30 @@ namespace Client
             if (await storageService.DeleteDirectory(originFolder, withContentWithin) == false)
             {
                 throw new Exception($"{nameof(storageService.DeleteDirectory)} \"{folderToDeletePath}\" was not successful!");
+            }
+            
+            Console.WriteLine($"-\"/{folderToDeletePath}\" was changed");
+        }
+
+        static string GetContainingDirectory(string path)
+        {
+            var index = path.LastIndexOf('/');
+            if (index == -1) return string.Empty;
+            return path.Substring(0, index);
+        }
+
+        static void PrintOutChangedDebugMessage(string path1, string path2)
+        {
+            path1 = GetContainingDirectory(path1);
+            path2 = GetContainingDirectory(path2);
+
+            if (path1 == path2)
+            {
+                Console.WriteLine($"-\"/{path1}\" was changed");
+            }
+            else
+            {
+                Console.WriteLine($"-\"/{path1}\" and \"/{path2}\" were changed");
             }
         }
     }

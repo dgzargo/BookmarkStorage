@@ -32,15 +32,6 @@ namespace VcogBookmark.Shared.Models
         {
             return Children.Concat(Children.OfType<Folder>().SelectMany(folder => folder.GetUnwrapped()));
         }
-
-        public DateTime? LastUpdateTime
-        {
-            get
-            {
-                var dates = GetUnwrapped().OfType<FilesGroup>().Select(filesGroup => filesGroup.LastTime).ToArray();
-                return dates.Any() ? (DateTime?) dates.Max() : null;
-            }
-        }
     }
 
     public abstract class FilesGroup : BookmarkHierarchyElement

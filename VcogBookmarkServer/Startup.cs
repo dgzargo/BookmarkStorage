@@ -1,9 +1,11 @@
+using System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using VcogBookmark.Shared;
 using VcogBookmark.Shared.Services;
 
 namespace VcogBookmarkServer
@@ -20,9 +22,15 @@ namespace VcogBookmarkServer
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
-            // services.AddDirectoryBrowser();
             // services.AddGrpc();
-            services.AddTransient<IStorageService>(provider => new StorageService(provider.GetRequiredService<IWebHostEnvironment>().WebRootPath));
+            services.AddSingleton<IStorageFactory>(provider =>
+            {
+                var wwwrootPath = provider.GetRequiredService<IWebHostEnvironment>().WebRootPath;
+                var groupEventInterval = TimeSpan.FromMilliseconds(600);
+                return new LocalStorageFactory(wwwrootPath, groupEventInterval);
+            });
+            services.AddTransient(provider => provider.GetRequiredService<IStorageFactory>().CreateStorageService());
+            services.AddTransient(provider => provider.GetRequiredService<IStorageFactory>().CreateChangeWatcher());
             services.AddSingleton<BookmarkHierarchyUtils>();
         }
 

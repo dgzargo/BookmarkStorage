@@ -26,7 +26,7 @@ namespace VcogBookmark.Shared.Services
             }
             else
             {
-                var rootPathFragments = hierarchyRoot.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                var rootPathFragments = hierarchyRoot.Split('/', Path.DirectorySeparatorChar)
                     .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
                 _hierarchyRoot = string.Join("/", rootPathFragments);
             }

@@ -203,6 +203,11 @@ namespace VcogBookmark.Shared.Services
                 var directoryInfo = new DirectoryInfo(oldFolderFullPath);
                 try
                 {
+                    // adding and deleting file for invoking event (needed for FolderChangeWatcher)
+                    var touchFileInfo = new FileInfo($"{oldFolderFullPath}\\{Guid.NewGuid()}.touch");
+                    touchFileInfo.Create().Dispose();
+                    touchFileInfo.Delete();
+                    
                     directoryInfo.Attributes = FileAttributes.Normal;
                     directoryInfo.MoveTo(newFolderFullPath);
                     return true;

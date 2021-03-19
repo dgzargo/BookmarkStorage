@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -16,11 +18,13 @@ namespace VcogBookmarkServer.Controllers
     public class BookmarksController: ControllerBase
     {
         private readonly IStorageService _storageService;
+        private readonly IFolderChangeWatcher _changeWatcher;
         private readonly BookmarkHierarchyUtils _hierarchyUtils;
 
-        public BookmarksController(IStorageService storageService, BookmarkHierarchyUtils hierarchyUtils)
+        public BookmarksController(IStorageService storageService, IFolderChangeWatcher changeWatcher, BookmarkHierarchyUtils hierarchyUtils)
         {
             _storageService = storageService;
+            _changeWatcher = changeWatcher;
             _hierarchyUtils = hierarchyUtils;
         }
         
@@ -112,6 +116,16 @@ namespace VcogBookmarkServer.Controllers
             }
             var moveResult = await _storageService.Move(element, newPath);
             return moveResult ? (IActionResult) Ok() : BadRequest();
+        }
+
+        [HttpGet("watch")]
+        public async Task<IActionResult> Watch([FromQuery]string root)
+        {
+            var pathFragments = root.Split('/').Where(fragment => !string.IsNullOrWhiteSpace(fragment));
+            root = '/' + string.Join('/', pathFragments) + '/';
+            if (root == "//") root = "/";
+            var changedPath = await _changeWatcher.FolderChanged.Where(path => path.StartsWith(root)).FirstAsync().ToTask();
+            return Ok('/' + changedPath.Substring(root.Length));
         }
 
         private void FormatPath(ref string path)
