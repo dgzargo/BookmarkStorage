@@ -118,7 +118,7 @@ namespace VcogBookmarkServer.Controllers
             return moveResult ? (IActionResult) Ok() : BadRequest();
         }
 
-        [HttpGet("watch")]
+        [HttpGet(Endpoints.WatchChangesEndpoint)]
         public async Task<IActionResult> Watch([FromQuery]string root)
         {
             var pathFragments = root.Split('/').Where(fragment => !string.IsNullOrWhiteSpace(fragment));

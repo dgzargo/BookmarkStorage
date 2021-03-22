@@ -10,5 +10,6 @@
         public const string GetHierarchyEndpoint = "hierarchy";
         public const string ClearEndpoint = "clear";
         public const string MoveEndpoint = "move";
+        public const string WatchChangesEndpoint = "watch";
     }
 }

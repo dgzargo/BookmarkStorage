@@ -132,9 +132,9 @@ namespace VcogBookmark.Shared.Services
 
         private async Task<string> WatchOneChange(CancellationToken cancellationToken)
         {
-            // const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.; // todo
+            const string address = Endpoints.BookmarkControllerRoute + "/" + Endpoints.WatchChangesEndpoint;
             var httpClient = new HttpClient {BaseAddress = _serverUrl};
-            var httpResponseMessage = await httpClient.GetAsync($"bookmarks/watch?root={_relativePath}", cancellationToken);
+            var httpResponseMessage = await httpClient.GetAsync($"{address}?root={_relativePath}", cancellationToken);
             httpResponseMessage.EnsureSuccessStatusCode();
             return await httpResponseMessage.Content.ReadAsStringAsync();
         }
