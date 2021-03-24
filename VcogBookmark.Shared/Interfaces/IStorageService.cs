@@ -2,7 +2,7 @@
 using VcogBookmark.Shared.Enums;
 using VcogBookmark.Shared.Models;
 
-namespace VcogBookmark.Shared.Services
+namespace VcogBookmark.Shared.Interfaces
 {
     public interface IStorageService
     {

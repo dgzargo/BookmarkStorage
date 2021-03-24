@@ -1,13 +1,10 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
-using System.Reactive.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Models;
-using VcogBookmark.Shared.Services;
 
 namespace Client
 {
@@ -185,14 +182,9 @@ namespace Client
             path1 = GetContainingDirectory(path1);
             path2 = GetContainingDirectory(path2);
 
-            if (path1 == path2)
-            {
-                Console.WriteLine($"-\"/{path1}\" was changed");
-            }
-            else
-            {
-                Console.WriteLine($"-\"/{path1}\" and \"/{path2}\" were changed");
-            }
+            Console.WriteLine(path1 == path2
+                ? $"-\"/{path1}\" was changed"
+                : $"-\"/{path1}\" and \"/{path2}\" were changed");
         }
     }
 }

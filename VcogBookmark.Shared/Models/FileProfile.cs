@@ -2,7 +2,7 @@
 using System.IO;
 using System.Threading.Tasks;
 using VcogBookmark.Shared.Enums;
-using VcogBookmark.Shared.Services;
+using VcogBookmark.Shared.Interfaces;
 
 namespace VcogBookmark.Shared.Models
 {

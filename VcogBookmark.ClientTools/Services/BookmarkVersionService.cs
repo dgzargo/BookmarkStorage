@@ -89,7 +89,7 @@ namespace VcogBookmark.ClientTools.Services
                     // return (folderX.Children.Count > 0) == (folderY.Children.Count > 0);
                     return true;
                 }
-                throw new NotImplementedException(); // if inheritance structure was modified
+                throw new ArgumentException(); // if inheritance structure was modified
             }
 
             public int GetHashCode(BookmarkHierarchyElement obj)
@@ -105,7 +105,7 @@ namespace VcogBookmark.ClientTools.Services
                 {
                     return obj.Name.GetHashCode();
                 }
-                throw new NotImplementedException(); // if inheritance structure was modified
+                throw new ArgumentException(); // if inheritance structure was modified
             }
         }
     }

@@ -1,4 +1,5 @@
 ﻿using System;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Services;
 
 namespace VcogBookmark.Shared

@@ -2,10 +2,9 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Models;
-using VcogBookmark.Shared.Services;
 
 namespace VcogBookmark.ClientTools.Services
 {

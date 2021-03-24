@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Models;
 
 namespace VcogBookmark.Shared.Services
@@ -65,8 +66,7 @@ namespace VcogBookmark.Shared.Services
                 foreach (var fileProfile in filesGroup.RelatedFiles)
                 {
                     var fullPath = GetFullPath(fileProfile);
-                    var fileInfo = new FileInfo(fullPath);
-                    fileInfo.Attributes = FileAttributes.Normal;
+                    var fileInfo = new FileInfo(fullPath) {Attributes = FileAttributes.Normal};
                     fileInfo.Delete();
                     // RecursiveDeleteEmptyDirectories(fileInfo.Directory);
                 }
@@ -78,23 +78,25 @@ namespace VcogBookmark.Shared.Services
                 return Task.FromResult(false);
             }
         }
-        
+
         private void RecursiveDeleteEmptyDirectories(Folder? folder)
         {
-            if (folder == null) return;
-            var directoryInfo = new DirectoryInfo(GetFullPath(folder));
-            if (directoryInfo.EnumerateFileSystemInfos().Any()) return; // check if empty
-            directoryInfo.Attributes = FileAttributes.Normal;
-            directoryInfo.Delete();
-            RecursiveDeleteEmptyDirectories(folder.Parent);
+            while (true)
+            {
+                if (folder == null) return;
+                var directoryInfo = new DirectoryInfo(GetFullPath(folder));
+                if (directoryInfo.EnumerateFileSystemInfos().Any()) return; // check if empty
+                directoryInfo.Attributes = FileAttributes.Normal;
+                directoryInfo.Delete();
+                folder = folder.Parent;
+            }
         }
 
         public override Task<bool> DeleteDirectory(Folder folder, bool withContentWithin)
         {
             try
             {
-                var directoryInfo = new DirectoryInfo(GetFullPath(folder));
-                directoryInfo.Attributes = FileAttributes.Normal;
+                var directoryInfo = new DirectoryInfo(GetFullPath(folder)) {Attributes = FileAttributes.Normal};
                 directoryInfo.Delete(withContentWithin);
                 return Task.FromResult(true);
             }
@@ -158,8 +160,7 @@ namespace VcogBookmark.Shared.Services
             {
                 try
                 {
-                    var fileInfo = new FileInfo(exceptedFile);
-                    fileInfo.Attributes = FileAttributes.Normal;
+                    var fileInfo = new FileInfo(exceptedFile) {Attributes = FileAttributes.Normal};
                     fileInfo.Delete();
                 }
                 catch
@@ -217,7 +218,7 @@ namespace VcogBookmark.Shared.Services
                     return false;
                 }
             }
-            throw new NotImplementedException("derived type isn't recognized!");
+            throw new ArgumentException("derived type isn't recognized!");
         }
 
         public Task<Stream> GetData(FileProfile fileProfile)

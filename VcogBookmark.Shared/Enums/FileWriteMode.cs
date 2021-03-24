@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace VcogBookmark.Shared.Enums
+﻿namespace VcogBookmark.Shared.Enums
 {
     public enum FileWriteMode
     {

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
 
@@ -89,7 +90,7 @@ namespace VcogBookmarkServer.Controllers
         {
             var foundFolder = await _storageService.FindFolder(root ?? string.Empty);
             if (foundFolder == null) return NotFound();
-            return _hierarchyUtils.ToAlignedJson(foundFolder);
+            return _hierarchyUtils.ToJson(foundFolder, true);
         }
 
         [HttpPost(Endpoints.ClearEndpoint)]

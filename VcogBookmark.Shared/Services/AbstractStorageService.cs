@@ -1,10 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using VcogBookmark.Shared.Enums;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Models;
 
 namespace VcogBookmark.Shared.Services
@@ -24,7 +24,7 @@ namespace VcogBookmark.Shared.Services
 
         public async Task<FilesGroup?> Find(string path)
         {
-            var folder = await GetHierarchy();
+            var folder = await GetHierarchy().ConfigureAwait(false);
             return folder != null ? Find(folder, path) : null;
         }
 
@@ -36,8 +36,7 @@ namespace VcogBookmark.Shared.Services
             var subfolder = hierarchy.Children
                 .OfType<Folder>()
                 .FirstOrDefault(f => f.Name == path.First());
-            if (subfolder == null) return null;
-            return FindFolder(fragmentsLeft, subfolder);
+            return subfolder == null ? null : FindFolder(fragmentsLeft, subfolder);
         }
 
         
@@ -50,7 +49,7 @@ namespace VcogBookmark.Shared.Services
 
         public async Task<Folder?> FindFolder(string path)
         {
-            var folder = await GetHierarchy();
+            var folder = await GetHierarchy().ConfigureAwait(false);
             return folder != null ? FindFolder(folder, path) : null;
         }
 

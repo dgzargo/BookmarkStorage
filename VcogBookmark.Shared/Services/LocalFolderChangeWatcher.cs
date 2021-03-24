@@ -1,19 +1,12 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading;
-using System.Threading.Tasks;
+using VcogBookmark.Shared.Interfaces;
 
 namespace VcogBookmark.Shared.Services
 {
-    public interface IFolderChangeWatcher : IDisposable
-    {
-        public IObservable<string> FolderChanged { get; }
-    }
-    
     public class LocalFolderChangeWatcher : IFolderChangeWatcher
     {
         public LocalFolderChangeWatcher(string fileSystemPath, TimeSpan groupEventInterval) // TimeSpan should smooth frequent file system event and double ping time
@@ -21,19 +14,22 @@ namespace VcogBookmark.Shared.Services
             fileSystemPath = Path.GetFullPath(fileSystemPath) + '\\';
             
             _folderChangedRepeatedEvents = new Subject<string>();
-            _fileSystemWatcher = new FileSystemWatcher(fileSystemPath);
-            _fileSystemWatcher.IncludeSubdirectories = true;
-            _fileSystemWatcher.NotifyFilter = NotifyFilters.Size | NotifyFilters.FileName; // LastWrite filter could cause a bug by pushing unexpected directory path instead of filepath.
+            _fileSystemWatcher = new FileSystemWatcher(fileSystemPath)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.Size | NotifyFilters.FileName, // LastWrite filter could cause a bug by pushing unexpected directory path instead of filepath.
+            };
             _fileSystemWatcher.Error += ErrorEventHandler;
             _fileSystemWatcher.Changed += FileChangedHandler;
             _fileSystemWatcher.Created += FileChangedHandler;
             _fileSystemWatcher.Deleted += FileChangedHandler;
             _fileSystemWatcher.Renamed += FileChangedHandler;
-            
-            
-            _directorySystemWatcher = new FileSystemWatcher(fileSystemPath);
-            _directorySystemWatcher.IncludeSubdirectories = true;
-            _directorySystemWatcher.NotifyFilter = NotifyFilters.DirectoryName; // LastAccess or LastWrite filter could cause a bug by pushing unexpected filepath instead of directory path. Fixed by adding 'guid.touch' file in Move<Folder> method.
+
+            _directorySystemWatcher = new FileSystemWatcher(fileSystemPath)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.DirectoryName, // LastAccess or LastWrite filter could cause a bug by pushing unexpected filepath instead of directory path. Fixed by adding 'guid.touch' file in Move<Folder> method.
+            };
             _directorySystemWatcher.Error += ErrorEventHandler;
             _directorySystemWatcher.Changed += FolderChangedHandler;
             _directorySystemWatcher.Created += FolderChangedHandler;
@@ -100,51 +96,5 @@ namespace VcogBookmark.Shared.Services
         {
             _folderChangedRepeatedEvents.OnNext(e.FullPath + '\\');
         }
-    }
-
-    public class NetworkFolderChangeWatcher : IFolderChangeWatcher
-    {
-        private readonly Uri _serverUrl;
-        private readonly string _relativePath;
-        private readonly CancellationTokenSource _cancellationTokenSource;
-
-        public NetworkFolderChangeWatcher(string serverUrl, string? relativePath = null)
-        {
-            _serverUrl = new Uri(serverUrl);
-            if (relativePath == null)
-            {
-                _relativePath = "/";
-            }
-            else
-            {
-                var rootPathFragments = relativePath.Split('/', Path.DirectorySeparatorChar)
-                    .Where(fragment => !string.IsNullOrWhiteSpace(fragment)).ToArray();
-                _relativePath = '/' + string.Join("/", rootPathFragments);
-            }
-
-            _cancellationTokenSource = new CancellationTokenSource();
-            FolderChanged = Observable.FromAsync(async token =>
-            {
-                using var mergedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(token, _cancellationTokenSource.Token);
-                return await WatchOneChange(mergedCancellationTokenSource.Token);
-            }).Repeat();
-        }
-
-        private async Task<string> WatchOneChange(CancellationToken cancellationToken)
-        {
-            const string address = Endpoints.BookmarkControllerRoute + "/" + Endpoints.WatchChangesEndpoint;
-            var httpClient = new HttpClient {BaseAddress = _serverUrl};
-            var httpResponseMessage = await httpClient.GetAsync($"{address}?root={_relativePath}", cancellationToken);
-            httpResponseMessage.EnsureSuccessStatusCode();
-            return await httpResponseMessage.Content.ReadAsStringAsync();
-        }
-        
-        public void Dispose()
-        {
-            _cancellationTokenSource.Cancel();
-            _cancellationTokenSource.Dispose();
-        }
-
-        public IObservable<string> FolderChanged { get; }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using VcogBookmark.Shared.Interfaces;
 using VcogBookmark.Shared.Models;
 
 namespace VcogBookmark.Shared.Services
