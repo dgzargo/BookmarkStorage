@@ -1,10 +1,12 @@
 using System;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using VcogBookmark.Shared;
 using VcogBookmark.Shared.Services;
 
@@ -21,6 +23,44 @@ namespace VcogBookmarkServer
         
         public void ConfigureServices(IServiceCollection services)
         {
+            services.Configure<AuthOptions>(_configuration.GetSection("JwtBearerOptions"));
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.RequireHttpsMetadata = false;
+                    var authOptions = _configuration.GetSection("JwtBearerOptions").Get<AuthOptions>();
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = authOptions.Issuer,
+ 
+                        ValidateAudience = true,
+                        ValidAudience = authOptions.Audience,
+                        
+                        ClockSkew = TimeSpan.FromSeconds(20),
+                        /*LifetimeValidator = (notBefore, expires, securityToken, validationParameters) =>
+                        {
+                            if (validationParameters.ValidateLifetime == false)
+                            {
+                                return true;
+                            }
+                            var now = DateTime.UtcNow;
+                            if (notBefore.HasValue)
+                            {
+                                if (notBefore.Value > now) return false;
+                            }
+                            if (expires.HasValue)
+                            {
+                                if (expires.Value < now) return false;
+                            }
+                            return true;
+                        },//*/
+                        ValidateLifetime = true,
+ 
+                        IssuerSigningKey = authOptions.GetSymmetricSecurityKey(),
+                        ValidateIssuerSigningKey = true,
+                    };
+                });
             services.AddControllers();
             // services.AddGrpc();
             services.AddSingleton<IStorageFactory>(provider =>
@@ -48,22 +88,11 @@ namespace VcogBookmarkServer
 
             // app.UseHttpsRedirection();
             
-            var provider = new FileExtensionContentTypeProvider();
-            provider.Mappings[".vbm"] = "application/text";
-            app.UseStaticFiles(new StaticFileOptions
-            {
-                ContentTypeProvider = provider,
-                OnPrepareResponse = context =>
-                {
-                    context.Context.Response.Headers.Add("File-Last-Modified", context.File.LastModified.UtcDateTime.ToString("o"));
-                }
-            });
-            //app.UseDirectoryBrowser();//app.UseFileServer(enableDirectoryBrowsing: true);
-            
             app.UseRouting();
 
-            // app.UseAuthentication();
+            app.UseAuthentication();
             app.UseAuthorization();
+            
             // app.UseSession();
             // app.UseResponseCompression();
             // app.UseResponseCaching();

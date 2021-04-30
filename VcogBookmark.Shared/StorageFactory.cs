@@ -1,5 +1,6 @@
 ﻿using System;
 using VcogBookmark.Shared.Interfaces;
+using VcogBookmark.Shared.Models;
 using VcogBookmark.Shared.Services;
 
 namespace VcogBookmark.Shared
@@ -36,21 +37,23 @@ namespace VcogBookmark.Shared
     {
         private readonly string _serverUrl;
         private readonly string? _relativePath;
+        private readonly AccountTokenController _accountTokenController;
 
-        public NetworkStorageFactory(string serverUrl, string? relativePath = null)
+        public NetworkStorageFactory(string serverUrl, Person person, string? relativePath = null)
         {
             _serverUrl = serverUrl;
             _relativePath = relativePath;
+            _accountTokenController = new AccountTokenController(serverUrl, person.Login, person.Password);
         }
         
         public IStorageService CreateStorageService()
         {
-            return new BookmarkNetworkService(_serverUrl, _relativePath);
+            return new BookmarkNetworkService(_serverUrl, _accountTokenController, _relativePath);
         }
 
         public IFolderChangeWatcher CreateChangeWatcher()
         {
-            return new NetworkFolderChangeWatcher(_serverUrl, _relativePath);
+            return new NetworkFolderChangeWatcher(_serverUrl, _accountTokenController, _relativePath);
         }
     }
 }

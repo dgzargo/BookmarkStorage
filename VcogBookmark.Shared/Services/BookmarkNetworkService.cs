@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using VcogBookmark.Shared.Enums;
@@ -13,13 +14,16 @@ namespace VcogBookmark.Shared.Services
 {
     public class BookmarkNetworkService : AbstractStorageService, IFileDataProviderService
     {
+        private readonly IAccountTokenController _accountTokenController;
         private readonly BookmarkHierarchyUtils _bookmarkHierarchyUtils;
         private readonly string _hierarchyRoot;
-        private readonly Uri _baseUri;
+        private readonly HttpClient _httpClient;
 
-        public BookmarkNetworkService(string baseAddress, string? hierarchyRoot = null, BookmarkHierarchyUtils? bookmarkHierarchyUtils = null)
+        public BookmarkNetworkService(string baseAddress, IAccountTokenController accountTokenController, string? hierarchyRoot = null, BookmarkHierarchyUtils? bookmarkHierarchyUtils = null)
         {
-            _baseUri = new Uri(baseAddress);
+            if (baseAddress.Last() != '/') throw new ArgumentException("URL should end with '/'!", nameof(baseAddress));
+            _httpClient = new HttpClient {BaseAddress = new Uri($"{baseAddress}{Endpoints.BookmarkControllerRoute}/")};
+            _accountTokenController = accountTokenController;
             _bookmarkHierarchyUtils = bookmarkHierarchyUtils ?? BookmarkHierarchyUtils.Instance;
             if (hierarchyRoot == null)
             {
@@ -33,14 +37,20 @@ namespace VcogBookmark.Shared.Services
             }
         }
 
+        private async Task<HttpRequestMessage> CreateHttpRequestMessageWithAuthHeader(HttpMethod method, string requestUri, HttpContent? content = null)
+        {
+            var token = await _accountTokenController.GetToken();
+            var httpRequestMessage = new HttpRequestMessage(method, requestUri) {Content = content};
+            httpRequestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            return httpRequestMessage;
+        }
+
         public override async Task<bool> Save(FilesGroup filesGroup, FileWriteMode writeMode)
         {
-            const string createPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.CreateEndpoint;
-            const string updatePartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.UpdateEndpoint;
             var endpointPath = writeMode switch
             {
-                FileWriteMode.Override => updatePartialAddress,
-                FileWriteMode.CreateNew => createPartialAddress,
+                FileWriteMode.Override => Endpoints.UpdateEndpoint,
+                FileWriteMode.CreateNew => Endpoints.CreateEndpoint,
                 _ => throw new ArgumentOutOfRangeException(nameof(writeMode), writeMode, "such operation can't be done")
             };
 
@@ -57,9 +67,9 @@ namespace VcogBookmark.Shared.Services
                 multipartFormDataContent.Add(streamContent, EnumsHelper.ParseType(ext).ToString(), $"{filesGroup.Name}.{ext}");
             }
             multipartFormDataContent.Add(stringContent, "bookmarkPath");
-            
-            using var httpClient = new HttpClient{BaseAddress = _baseUri};
-            using var responseMessage = await httpClient.PostAsync(endpointPath, multipartFormDataContent).ConfigureAwait(false);
+
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Post, endpointPath, multipartFormDataContent).ConfigureAwait(false);
+            using var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             return responseMessage.IsSuccessStatusCode;
         }
 
@@ -73,8 +83,6 @@ namespace VcogBookmark.Shared.Services
 
         public override async Task<bool> DeleteBookmark(FilesGroup filesGroup)
         {
-            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.DeleteBookmarkEndpoint;
-            
             var fullBookmarkPath = GetFullPath(filesGroup);
             var stringContent = new StringContent(fullBookmarkPath);
 
@@ -83,15 +91,13 @@ namespace VcogBookmark.Shared.Services
                 {stringContent, "bookmarkPath"}
             };
 
-            using var client = new HttpClient {BaseAddress = _baseUri};
-            using var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent).ConfigureAwait(false);
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Post, Endpoints.DeleteBookmarkEndpoint, multipartFormDataContent).ConfigureAwait(false);
+            using var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             return responseMessage.IsSuccessStatusCode;
         }
 
         public override async Task<bool> DeleteDirectory(Folder folder, bool withContentWithin)
         {
-            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.DeleteBookmarkFolderEndpoint;
-
             var fullBookmarkPath = GetFullPath(folder);
             var pathContent = new StringContent(fullBookmarkPath);
             
@@ -100,19 +106,18 @@ namespace VcogBookmark.Shared.Services
             var multipartFormDataContent = new MultipartFormDataContent
             {
                 {pathContent, "directoryPath"},
-                {withContentWithinContent, "withContentWithin"}
+                {withContentWithinContent, "withContentWithin"},
             };
 
-            using var client = new HttpClient {BaseAddress = _baseUri};
-            using var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent).ConfigureAwait(false);
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Post, Endpoints.DeleteBookmarkFolderEndpoint, multipartFormDataContent).ConfigureAwait(false);
+            using var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             return responseMessage.IsSuccessStatusCode;
         }
 
         public override async Task<Folder?> GetHierarchy()
         {
-            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.GetHierarchyEndpoint;
-            using var client = new HttpClient {BaseAddress = _baseUri};
-            using var responseMessage = await client.GetAsync($"{requestPartialAddress}?root={_hierarchyRoot}").ConfigureAwait(false);
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Get, $"{Endpoints.GetHierarchyEndpoint}?root={_hierarchyRoot}").ConfigureAwait(false);
+            using var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             if (responseMessage.StatusCode == HttpStatusCode.NotFound)
             {
                 return null;
@@ -125,8 +130,6 @@ namespace VcogBookmark.Shared.Services
 
         public override async Task<bool> Clear(Folder folder)
         {
-            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.ClearEndpoint;
-            
             var fullPath = GetFullPath(folder);
             if (string.IsNullOrWhiteSpace(fullPath))
             {
@@ -139,15 +142,13 @@ namespace VcogBookmark.Shared.Services
                 {pathContent, "directoryPath"},
             };
             
-            using var client = new HttpClient {BaseAddress = _baseUri};
-            using var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent).ConfigureAwait(false);
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Post, Endpoints.ClearEndpoint, multipartFormDataContent).ConfigureAwait(false);
+            using var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             return responseMessage.IsSuccessStatusCode;
         }
 
         public override async Task<bool> Move(BookmarkHierarchyElement element, string newPath)
         {
-            const string requestPartialAddress = Endpoints.BookmarkControllerRoute + "/" + Endpoints.MoveEndpoint;
-            
             var originalFullPath = GetFullPath(element);
             var originalPathContent = new StringContent(originalFullPath);
             
@@ -164,21 +165,28 @@ namespace VcogBookmark.Shared.Services
                 {isFolderContent, "isFolder"},
             };
             
-            using var client = new HttpClient {BaseAddress = _baseUri};
-            using var responseMessage = await client.PostAsync(requestPartialAddress, multipartFormDataContent).ConfigureAwait(false);
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Post, Endpoints.MoveEndpoint, multipartFormDataContent).ConfigureAwait(false);
+            using var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             return responseMessage.IsSuccessStatusCode;
         }
 
         public async Task<Stream> GetData(FileProfile fileProfile)
         {
-            var fullPath = GetFullPath(fileProfile);
-            using var client = new HttpClient {BaseAddress = _baseUri};
-            var responseMessage = await client.GetAsync(fullPath).ConfigureAwait(false);
+            var filePathContent = new StringContent(fileProfile.LocalPath, Encoding.UTF8, "text/plain");
+            var fileTypeContent = new StringContent(fileProfile.FileType.ToString(), Encoding.UTF8, "text/plain");
+            var multipartFormDataContent = new MultipartFormDataContent
+            {
+                {filePathContent, "filePath"},
+                {fileTypeContent, "fileType"},
+            };
+            using var httpRequestMessage = await CreateHttpRequestMessageWithAuthHeader(HttpMethod.Get, Endpoints.GetFileEndpoint, multipartFormDataContent).ConfigureAwait(false);
+            var responseMessage = await _httpClient.SendAsync(httpRequestMessage, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             responseMessage.EnsureSuccessStatusCode();
             var dataStream = await responseMessage.Content.ReadAsStreamAsync().ConfigureAwait(false);
             return dataStream;
         }
 
+        [Obsolete("Trying to get rid of methods like this.")]
         private string GetFullPath(FileProfile fileProfile)
         {
             var initial = new StringBuilder(fileProfile.LocalPath.Length + 5);

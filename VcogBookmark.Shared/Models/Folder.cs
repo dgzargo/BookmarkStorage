@@ -16,5 +16,7 @@ namespace VcogBookmark.Shared.Models
         {
             return Children.Concat(Children.OfType<Folder>().SelectMany(folder => folder.GetUnwrapped()));
         }
+
+        public override bool IsFolder => true;
     }
 }

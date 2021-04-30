@@ -17,5 +17,6 @@ namespace VcogBookmark.Shared.Models
         public abstract IEnumerable<BookmarkFileType> FileTypes { get; }
         public IEnumerable<FileProfile> RelatedFiles => FileTypes.Select(type => new FileProfile(LocalPath, type, LastTime, ProviderService));
         private IFileDataProviderService ProviderService { get; }
+        public override bool IsFolder => false;
     }
 }

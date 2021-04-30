@@ -5,5 +5,7 @@
         public FakeFilesGroup(string bookmarkName) : base(bookmarkName)
         {
         }
+
+        public override bool IsFolder => false;
     }
 }

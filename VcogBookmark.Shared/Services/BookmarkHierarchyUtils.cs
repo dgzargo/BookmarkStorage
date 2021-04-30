@@ -9,12 +9,13 @@ namespace VcogBookmark.Shared.Services
 {
     public class BookmarkHierarchyUtils
     {
+        private static char SeparatorChar => '/';
         public static readonly BookmarkHierarchyUtils Instance = new BookmarkHierarchyUtils();
         public string ToJson(BookmarkHierarchyElement hierarchy, bool serializeAsRoot)
         {
             if (hierarchy is FilesGroup bookmarkHierarchyBookmark)
             {
-                return $"\"{bookmarkHierarchyBookmark.Name}@{bookmarkHierarchyBookmark.LastTime:o}\"";
+                return $"\"{bookmarkHierarchyBookmark.Name}{SeparatorChar}{bookmarkHierarchyBookmark.LastTime:o}\"";
             }
             if (hierarchy is Folder bookmarkHierarchyFolder)
             {
@@ -55,7 +56,7 @@ namespace VcogBookmark.Shared.Services
             {
                 if (jToken.Type == JTokenType.String)
                 {
-                    var bookmarkData = jToken.ToString().Split('@');
+                    var bookmarkData = jToken.ToString().Split(SeparatorChar);
                     if (bookmarkData.Length != 2) throw new FormatException("wrong bookmark format!");
                     var bookmark = new Bookmark(bookmarkData[0], DateTime.Parse(bookmarkData[1]).ToUniversalTime(), providerService);
                     bookmark.Parent = folder;

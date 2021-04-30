@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Publish to Conoco" type="DotNetMsBuildPublish" factoryName="Publish to IIS">
+    <riderPublish publish_profile="IISProfile - ConocoPhillips.pubxml" save_password="true" user_name="s.volchetskyi@visco.no" uuid_high="2124883039390614862" uuid_low="-7452360875183900800" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -9,6 +9,7 @@
 
         public Folder? Parent { get; set; }
         public string Name { get; set; }
-        public string LocalPath => Parent is null ? Name : $"{Parent.LocalPath}/{Name}";
+        public abstract bool IsFolder { get; }
+        public virtual string LocalPath => Parent is null ? IsFolder ? Name + '/' : Name : IsFolder ? $"{Parent.LocalPath}{Name}/" : $"{Parent.LocalPath}{Name}";
     }
 }

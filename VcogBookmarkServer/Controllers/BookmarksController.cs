@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VcogBookmark.Shared;
@@ -15,7 +17,7 @@ using VcogBookmark.Shared.Services;
 
 namespace VcogBookmarkServer.Controllers
 {
-    [ApiController, Route(Endpoints.BookmarkControllerRoute)]
+    [ApiController, Route(Endpoints.BookmarkControllerRoute), Authorize]
     public class BookmarksController: ControllerBase
     {
         private readonly IStorageService _storageService;
@@ -122,11 +124,37 @@ namespace VcogBookmarkServer.Controllers
         [HttpGet(Endpoints.WatchChangesEndpoint)]
         public async Task<IActionResult> Watch([FromQuery]string root)
         {
-            var pathFragments = root.Split('/').Where(fragment => !string.IsNullOrWhiteSpace(fragment));
-            root = '/' + string.Join('/', pathFragments) + '/';
-            if (root == "//") root = "/";
+            if (string.IsNullOrEmpty(root))
+            {
+                root = "/";
+            }
+            else
+            {
+                var pathFragments = root.Split('/').Where(fragment => !string.IsNullOrWhiteSpace(fragment));
+                root = string.Join('/', pathFragments);
+                root = root == string.Empty ? "/" : $"/{root}/";
+            }
             var changedPath = await _changeWatcher.FolderChanged.Where(path => path.StartsWith(root)).FirstAsync().ToTask();
             return Ok('/' + changedPath.Substring(root.Length));
+        }
+
+        [HttpGet(Endpoints.GetFileEndpoint)]
+        public async Task GetFile([FromForm]string filePath, [FromForm]string fileType)
+        {
+            var type = Enum.Parse<BookmarkFileType>(fileType);
+            var filesGroup = await _storageService.Find(filePath);
+            var fileProfile = filesGroup?.RelatedFiles.FirstOrDefault(profile => profile.FileType == type);
+            if (fileProfile == null)
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            var dataStream = await fileProfile.GetData();
+            if (type == BookmarkFileType.BookmarkBody) Response.ContentType = "text/plain";
+            else if (type == BookmarkFileType.BookmarkImage) Response.ContentType = "image/jpeg";
+            Response.StatusCode = StatusCodes.Status200OK;
+            await dataStream.CopyToAsync(Response.Body);
         }
 
         private void FormatPath(ref string path)

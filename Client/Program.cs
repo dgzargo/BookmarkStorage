@@ -17,7 +17,8 @@ namespace Client
             /*await new LocalStorageFactory(Directory.GetCurrentDirectory() + @"\root", TimeSpan.FromSeconds(0.2))
                 .SetupAndRunTests(TimeSpan.FromSeconds(0.6));//*/
             // await new NetworkStorageFactory("https://localhost:5001/").SetupAndRunTests(TimeSpan.FromSeconds(1));
-            await new NetworkStorageFactory("https://localhost:5001/", "/subfolder/").SetupAndRunTests(TimeSpan.FromSeconds(0.6));
+            var person = new Person("BookmarksSharedServerUser", "5b&5wXcYOH6SQ^zj", "user");
+            await new NetworkStorageFactory("https://localhost:5001/", person, "/subfolder/").SetupAndRunTests(TimeSpan.FromSeconds(0.6));
         }
 
         static async Task SetupAndRunTests(this IStorageFactory storageFactory, TimeSpan? withDelay = null)

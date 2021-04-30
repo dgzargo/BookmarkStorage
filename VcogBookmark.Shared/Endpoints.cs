@@ -11,5 +11,6 @@
         public const string ClearEndpoint = "clear";
         public const string MoveEndpoint = "move";
         public const string WatchChangesEndpoint = "watch";
+        public const string GetFileEndpoint = "get-file";
     }
 }
